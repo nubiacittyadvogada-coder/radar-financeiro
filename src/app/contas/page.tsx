@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { formatarMoeda } from '@/lib/utils'
+import * as XLSX from 'xlsx'
 
 const CATEGORIAS = [
   { value: 'aluguel', label: '🏢 Aluguel' },
@@ -144,6 +145,26 @@ export default function ContasPage() {
     }
   }
 
+  function exportarExcel() {
+    const STATUS_NOME_EXP: Record<string, string> = { pendente: 'Pendente', atrasado: 'Atrasada', pago: 'Pago' }
+    const dados = contas.map(c => ({
+      'Descrição': c.descricao,
+      'Fornecedor': c.fornecedor || '',
+      'Categoria': CATEGORIAS.find(cat => cat.value === c.categoria)?.label?.replace(/^[^\s]+\s/, '') || c.categoria,
+      'Valor (R$)': Number(c.valor),
+      'Vencimento': new Date(c.vencimento).toLocaleDateString('pt-BR'),
+      'Status': STATUS_NOME_EXP[c.status] || c.status,
+      'Recorrente': c.recorrente ? (FREQUENCIAS.find(f => f.value === c.frequencia)?.label || 'Sim') : 'Não',
+      'Observações': c.observacoes || '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dados)
+    ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 25 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Contas a Pagar')
+    XLSX.writeFile(wb, `contas-a-pagar-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const contasFiltradas = contas.filter(c => filtro === 'todas' || c.status === filtro)
 
   const totalPendente = contas
@@ -181,6 +202,13 @@ export default function ContasPage() {
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
           >
             + Nova Conta
+          </button>
+          <button
+            onClick={exportarExcel}
+            disabled={contas.length === 0}
+            className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 font-medium"
+          >
+            📥 Excel
           </button>
           <button onClick={() => router.push('/lancamentos')} className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
             ↑↓ Lançamentos
