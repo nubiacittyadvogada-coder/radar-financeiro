@@ -2,9 +2,13 @@ import prisma from './db'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 
-async function chamarIA(prompt: string, maxTokens: number = 300): Promise<string> {
+async function chamarIA(prompt: string, maxTokens: number = 300, jsonMode = false): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY não configurada no servidor')
+
+  const messages: any[] = [{ role: 'user', content: prompt }]
+  // Prefill com "{" força o modelo a retornar JSON puro, sem markdown
+  if (jsonMode) messages.push({ role: 'assistant', content: '{' })
 
   const res = await fetch(ANTHROPIC_API, {
     method: 'POST',
@@ -16,7 +20,7 @@ async function chamarIA(prompt: string, maxTokens: number = 300): Promise<string
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
+      messages,
     }),
   })
 
@@ -26,7 +30,9 @@ async function chamarIA(prompt: string, maxTokens: number = 300): Promise<string
   }
 
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  const text = data.content?.[0]?.text ?? ''
+  // Se usou prefill, o "{" inicial já foi injetado — concatena
+  return jsonMode ? '{' + text : text
 }
 
 export async function responderPergunta(
@@ -159,17 +165,16 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
   "mensagemMotivacional": "frase final para a Núbia"
 }`
 
-  const text = await chamarIA(prompt, 3000)
+  const text = await chamarIA(prompt, 3000, true)
 
-  // Remove markdown code blocks se existirem
-  const clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
-  const jsonMatch = clean.match(/\{[\s\S]*\}/)
   let estrategia: any = { diagnostico: text }
-  if (jsonMatch) {
-    try {
-      estrategia = JSON.parse(jsonMatch[0])
-    } catch {
-      estrategia = { diagnostico: clean }
+  try {
+    estrategia = JSON.parse(text)
+  } catch {
+    // Fallback: tenta extrair JSON do texto
+    const match = text.match(/\{[\s\S]*\}/)
+    if (match) {
+      try { estrategia = JSON.parse(match[0]) } catch { estrategia = { diagnostico: text } }
     }
   }
 
