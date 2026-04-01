@@ -1,6 +1,4 @@
 import PDFDocument from 'pdfkit'
-import fs from 'fs'
-import path from 'path'
 import prisma from './db'
 
 const MESES = [
@@ -15,7 +13,7 @@ export async function gerarRelatorioPdf(
   clienteId: string,
   mes: number,
   ano: number
-): Promise<string> {
+): Promise<Buffer> {
   const fechamento = await prisma.fechamento.findUnique({
     where: { clienteId_mes_ano: { clienteId, mes, ano } },
     include: { cliente: { include: { bpo: true } } },
@@ -32,17 +30,15 @@ export async function gerarRelatorioPdf(
     where: { clienteId_mes_ano: { clienteId, mes: mesAnt, ano: anoAnt } },
   })
 
-  // Top 3 maiores despesas
+  // Top 5 maiores despesas
   const maioresDespesas = await prisma.lancamento.findMany({
     where: {
-      clienteId,
-      mes,
-      ano,
+      clienteId, mes, ano,
       previsto: false,
       tipo: { in: ['pessoal', 'marketing', 'geral', 'custo_direto'] },
     },
     orderBy: { valor: 'asc' },
-    take: 3,
+    take: 5,
   })
 
   // Alertas ativos
@@ -52,203 +48,211 @@ export async function gerarRelatorioPdf(
     take: 1,
   })
 
-  // Gerar PDF
-  const storagePath = process.env.STORAGE_PATH || './uploads'
-  const pdfDir = path.join(storagePath, 'relatorios')
-  if (!fs.existsSync(pdfDir)) {
-    fs.mkdirSync(pdfDir, { recursive: true })
-  }
+  // Gerar PDF em memória
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40, info: {
+      Title: `DRE – ${MESES[mes]}/${ano}`,
+      Author: 'Radar Financeiro',
+    }})
 
-  const fileName = `relatorio-${clienteId.substring(0, 8)}-${ano}-${String(mes).padStart(2, '0')}.pdf`
-  const filePath = path.join(pdfDir, fileName)
+    const chunks: Buffer[] = []
+    doc.on('data', (chunk) => chunks.push(chunk))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
 
-  return new Promise<string>((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 40,
-      info: {
-        Title: `Relatório Financeiro - ${MESES[mes]}/${ano}`,
-        Author: 'Radar Financeiro',
-      },
-    })
-
-    const stream = fs.createWriteStream(filePath)
-    doc.pipe(stream)
-
-    const pageWidth = doc.page.width - 80 // margens
+    const pageWidth = doc.page.width - 80
 
     // === CABEÇALHO ===
-    doc
-      .fontSize(20)
-      .font('Helvetica-Bold')
-      .text('RADAR FINANCEIRO', 40, 40)
-    doc
-      .fontSize(10)
-      .font('Helvetica')
-      .fillColor('#666')
-      .text(fechamento.cliente.bpo.nome, 40, 65)
-    doc
-      .fontSize(14)
-      .fillColor('#000')
-      .font('Helvetica-Bold')
-      .text(fechamento.cliente.nomeEmpresa, 40, 85)
-    doc
-      .fontSize(12)
-      .font('Helvetica')
-      .text(`${MESES[mes]} / ${ano}`, 40, 105)
+    doc.fontSize(18).font('Helvetica-Bold').fillColor('#1e3a5f').text('RADAR FINANCEIRO', 40, 40)
+    doc.fontSize(9).font('Helvetica').fillColor('#666').text(fechamento.cliente.bpo.nome, 40, 62)
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('#000').text(fechamento.cliente.nomeEmpresa, 40, 78)
+    doc.fontSize(10).font('Helvetica').fillColor('#444').text(
+      `Demonstrativo de Resultado do Exercício — ${MESES[mes]} / ${ano}`, 40, 96
+    )
+    doc.moveTo(40, 115).lineTo(40 + pageWidth, 115).lineWidth(1.5).stroke('#1e3a5f')
 
-    doc.moveTo(40, 125).lineTo(40 + pageWidth, 125).stroke('#ccc')
-
-    // === RESULTADO EM DESTAQUE ===
+    // === RESULTADO DESTAQUE ===
     const lucro = Number(fechamento.lucroLiquido)
     const corResultado = lucro >= 0 ? '#16a34a' : '#dc2626'
-    const textoResultado = lucro >= 0
-      ? `Você lucrou R$ ${fmt(lucro)} este mês`
-      : `Este mês o resultado foi negativo em R$ ${fmt(Math.abs(lucro))}`
+    doc.fontSize(15).font('Helvetica-Bold').fillColor(corResultado)
+      .text(
+        lucro >= 0
+          ? `Resultado: Lucro de R$ ${fmt(lucro)}`
+          : `Resultado: Prejuízo de R$ ${fmt(Math.abs(lucro))}`,
+        40, 124, { align: 'center', width: pageWidth }
+      )
 
-    doc
-      .fontSize(18)
-      .font('Helvetica-Bold')
-      .fillColor(corResultado)
-      .text(textoResultado, 40, 140, { align: 'center', width: pageWidth })
-
-    doc.moveTo(40, 175).lineTo(40 + pageWidth, 175).stroke('#ccc')
+    doc.moveTo(40, 148).lineTo(40 + pageWidth, 148).lineWidth(0.5).stroke('#ccc')
 
     // === 4 INDICADORES ===
-    let y = 190
+    let y = 158
     const colW = pageWidth / 4
-
     const indicadores = [
-      { label: 'Receita Bruta', valor: Number(fechamento.receitaBruta), cor: '#2563eb' },
-      { label: 'Margem', valor: Number(fechamento.percMargem), cor: '#7c3aed', sufixo: '%' },
-      { label: 'Lucro Op.', valor: Number(fechamento.lucroOperacional), cor: lucro >= 0 ? '#16a34a' : '#dc2626' },
-      { label: 'Caixa Final', valor: Number(fechamento.saldoFinal || 0), cor: '#0891b2' },
+      { label: 'Receita Bruta', valor: `R$ ${fmt(Number(fechamento.receitaBruta))}`, cor: '#2563eb' },
+      { label: 'Margem', valor: `${Number(fechamento.percMargem).toFixed(1)}%`, cor: '#7c3aed' },
+      { label: 'Lucro Operacional', valor: `R$ ${fmt(Number(fechamento.lucroOperacional))}`, cor: lucro >= 0 ? '#16a34a' : '#dc2626' },
+      { label: 'Saldo Final de Caixa', valor: `R$ ${fmt(Number(fechamento.saldoFinal || 0))}`, cor: '#0891b2' },
     ]
-
     indicadores.forEach((ind, idx) => {
       const x = 40 + idx * colW
-      doc.fontSize(8).font('Helvetica').fillColor('#666').text(ind.label, x, y, { width: colW, align: 'center' })
-      const valStr = ind.sufixo
-        ? `${ind.valor.toFixed(1)}${ind.sufixo}`
-        : `R$ ${fmt(ind.valor)}`
-      doc.fontSize(13).font('Helvetica-Bold').fillColor(ind.cor).text(valStr, x, y + 14, { width: colW, align: 'center' })
+      doc.fontSize(7).font('Helvetica').fillColor('#888').text(ind.label, x, y, { width: colW, align: 'center' })
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(ind.cor).text(ind.valor, x, y + 13, { width: colW, align: 'center' })
     })
 
-    y += 45
+    y += 40
     doc.moveTo(40, y).lineTo(40 + pageWidth, y).stroke('#ccc')
-    y += 15
+    y += 12
 
-    // === DRE RESUMIDA ===
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Demonstrativo de Resultado', 40, y)
-    y += 20
+    // === DRE COMPLETA ===
+    const dreY = y
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#1e3a5f').text('DRE — Demonstrativo de Resultado', 40, y)
+    y += 18
 
-    const linhasDre = [
-      { label: 'Receita Bruta', valor: Number(fechamento.receitaBruta), bold: true },
-      { label: '(-) Repasse Êxito', valor: -Number(fechamento.repasseExito) },
-      { label: '(-) Impostos', valor: -Number(fechamento.impostos) },
-      { label: '= Receita Líquida', valor: Number(fechamento.receitaLiquida), bold: true },
-      { label: '(-) Custos Diretos', valor: -Number(fechamento.custosDiretos) },
-      { label: '= Margem de Contribuição', valor: Number(fechamento.margemContribuicao), bold: true },
-      { label: '(-) Despesas ADM', valor: -Number(fechamento.totalDespesasAdm) },
-      { label: '= Lucro Operacional', valor: Number(fechamento.lucroOperacional), bold: true },
-      { label: '(-) Retirada Sócios', valor: -Number(fechamento.retiradaSocios) },
-      { label: '(+/-) Resultado Financeiro', valor: Number(fechamento.resultadoFinanceiro) },
-      { label: '= Lucro Líquido', valor: Number(fechamento.lucroLiquido), bold: true },
-    ]
+    // Cabeçalho da tabela
+    doc.fontSize(8).font('Helvetica-Bold').fillColor('#888')
+      .text('DESCRIÇÃO', 50, y, { width: 280 })
+      .text('VALOR (R$)', 330, y, { width: 120, align: 'right' })
+      .text('%', 450, y, { width: 50, align: 'right' })
+    y += 12
+    doc.moveTo(40, y).lineTo(40 + pageWidth, y).stroke('#ddd')
+    y += 6
 
-    linhasDre.forEach((linha) => {
-      const font = linha.bold ? 'Helvetica-Bold' : 'Helvetica'
-      const cor = linha.valor < 0 ? '#dc2626' : '#000'
-      doc.fontSize(9).font(font).fillColor('#333').text(linha.label, 50, y, { width: 250 })
-      doc.fontSize(9).font(font).fillColor(cor).text(`R$ ${fmt(linha.valor)}`, 300, y, { width: 150, align: 'right' })
-      y += 14
-    })
+    const receitaBruta = Number(fechamento.receitaBruta)
 
-    y += 10
+    function linhaGrande(label: string, valor: number, cor = '#000') {
+      doc.moveTo(40, y - 2).lineTo(40 + pageWidth, y - 2).lineWidth(0.3).stroke('#e5e7eb')
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(cor)
+        .text(label, 50, y, { width: 280 })
+        .text(`R$ ${fmt(valor)}`, 330, y, { width: 120, align: 'right' })
+        .text(receitaBruta ? `${((valor / receitaBruta) * 100).toFixed(1)}%` : '-', 450, y, { width: 50, align: 'right' })
+      y += 15
+    }
+
+    function linhaPequena(label: string, valor: number) {
+      doc.fontSize(8).font('Helvetica').fillColor('#444')
+        .text(label, 60, y, { width: 270 })
+        .text(`R$ ${fmt(valor)}`, 330, y, { width: 120, align: 'right' })
+        .text(receitaBruta ? `${((valor / receitaBruta) * 100).toFixed(1)}%` : '-', 450, y, { width: 50, align: 'right' })
+      y += 13
+    }
+
+    // Receita
+    linhaGrande('Receita Bruta', Number(fechamento.receitaBruta), '#1e3a5f')
+    linhaPequena('  (-) Repasse Êxito / Parceria', -Number(fechamento.repasseExito))
+    linhaPequena('  (-) Impostos e Tributos', -Number(fechamento.impostos))
+    linhaGrande('= Receita Líquida', Number(fechamento.receitaLiquida), '#1e3a5f')
+    y += 3
+
+    // Custos e Margem
+    linhaPequena('  (-) Custos Diretos', -Number(fechamento.custosDiretos))
+    linhaGrande('= Margem de Contribuição', Number(fechamento.margemContribuicao),
+      Number(fechamento.margemContribuicao) >= 0 ? '#16a34a' : '#dc2626')
+    y += 3
+
+    // Despesas ADM detalhadas
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#444')
+      .text('(-) Despesas Administrativas', 50, y, { width: 280 })
+      .text(`R$ ${fmt(Number(fechamento.totalDespesasAdm))}`, 330, y, { width: 120, align: 'right' })
+    y += 13
+    linhaPequena('      Pessoal / Folha', -Number(fechamento.despesasPessoal))
+    linhaPequena('      Marketing / Publicidade', -Number(fechamento.despesasMarketing))
+    linhaPequena('      Despesas Gerais', -Number(fechamento.despesasGerais))
+    y += 3
+
+    linhaGrande('= Lucro Operacional', Number(fechamento.lucroOperacional),
+      Number(fechamento.lucroOperacional) >= 0 ? '#16a34a' : '#dc2626')
+    y += 3
+
+    // Abaixo do lucro operacional
+    linhaPequena('  (-) Retirada de Sócios', -Number(fechamento.retiradaSocios))
+    linhaPequena('  (+/-) Resultado Financeiro', Number(fechamento.resultadoFinanceiro))
+
+    y += 4
+    doc.moveTo(40, y).lineTo(40 + pageWidth, y).lineWidth(1).stroke('#1e3a5f')
+    y += 6
+    linhaGrande('= LUCRO LÍQUIDO', Number(fechamento.lucroLiquido),
+      lucro >= 0 ? '#16a34a' : '#dc2626')
+
+    if (fechamento.saldoFinal) {
+      y += 4
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#0891b2')
+        .text('Saldo Final de Caixa', 50, y, { width: 280 })
+        .text(`R$ ${fmt(Number(fechamento.saldoFinal))}`, 330, y, { width: 120, align: 'right' })
+      y += 15
+    }
+
+    y += 8
     doc.moveTo(40, y).lineTo(40 + pageWidth, y).stroke('#ccc')
-    y += 15
+    y += 12
 
-    // === TOP 3 DESPESAS ===
+    // === TOP 5 DESPESAS ===
     if (maioresDespesas.length > 0) {
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Maiores Despesas do Mês', 40, y)
-      y += 18
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#1e3a5f').text('Maiores Despesas do Mês', 40, y)
+      y += 14
 
       maioresDespesas.forEach((d, idx) => {
         const nome = d.favorecido || d.planoConta
-        doc.fontSize(9).font('Helvetica').fillColor('#333')
+        doc.fontSize(8).font('Helvetica').fillColor('#333')
           .text(`${idx + 1}. ${nome}`, 50, y, { width: 300 })
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#dc2626')
-          .text(`R$ ${fmt(Math.abs(Number(d.valor)))}`, 350, y, { width: 100, align: 'right' })
-        y += 14
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#dc2626')
+          .text(`R$ ${fmt(Math.abs(Number(d.valor)))}`, 350, y, { width: 110, align: 'right' })
+        y += 13
       })
-
-      y += 10
+      y += 6
     }
 
     // === COMPARATIVO ===
     if (anterior) {
       doc.moveTo(40, y).lineTo(40 + pageWidth, y).stroke('#ccc')
-      y += 15
-
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#000').text('Comparativo com Mês Anterior', 40, y)
-      y += 18
+      y += 10
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#1e3a5f')
+        .text(`Comparativo com ${MESES[mesAnt]}/${anoAnt}`, 40, y)
+      y += 14
 
       const comparativos = [
-        { label: 'Receita', atual: Number(fechamento.receitaBruta), ant: Number(anterior.receitaBruta) },
-        { label: 'Lucro Op.', atual: Number(fechamento.lucroOperacional), ant: Number(anterior.lucroOperacional) },
-        { label: 'Desp. ADM', atual: Number(fechamento.totalDespesasAdm), ant: Number(anterior.totalDespesasAdm) },
+        { label: 'Receita Bruta', atual: Number(fechamento.receitaBruta), ant: Number(anterior.receitaBruta) },
+        { label: 'Margem de Contribuição', atual: Number(fechamento.margemContribuicao), ant: Number(anterior.margemContribuicao) },
+        { label: 'Lucro Operacional', atual: Number(fechamento.lucroOperacional), ant: Number(anterior.lucroOperacional) },
+        { label: 'Despesas ADM', atual: Number(fechamento.totalDespesasAdm), ant: Number(anterior.totalDespesasAdm) },
+        { label: 'Retirada de Sócios', atual: Number(fechamento.retiradaSocios), ant: Number(anterior.retiradaSocios) },
+        { label: 'Lucro Líquido', atual: Number(fechamento.lucroLiquido), ant: Number(anterior.lucroLiquido) },
       ]
 
       comparativos.forEach((c) => {
         const variacao = c.ant !== 0 ? ((c.atual - c.ant) / Math.abs(c.ant)) * 100 : 0
         const sinal = variacao >= 0 ? '+' : ''
-        const cor = c.label === 'Desp. ADM'
+        const isRuimSobeEhRuim = c.label === 'Despesas ADM'
+        const cor = isRuimSobeEhRuim
           ? (variacao > 0 ? '#dc2626' : '#16a34a')
           : (variacao >= 0 ? '#16a34a' : '#dc2626')
 
-        doc.fontSize(9).font('Helvetica').fillColor('#333').text(c.label, 50, y, { width: 120 })
-        doc.fontSize(9).font('Helvetica').fillColor('#666').text(`R$ ${fmt(c.ant)} →`, 170, y, { width: 120 })
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#000').text(`R$ ${fmt(c.atual)}`, 290, y, { width: 100 })
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(cor).text(`${sinal}${variacao.toFixed(1)}%`, 400, y, { width: 60, align: 'right' })
-        y += 14
+        doc.fontSize(8).font('Helvetica').fillColor('#444').text(c.label, 50, y, { width: 150 })
+        doc.fontSize(8).font('Helvetica').fillColor('#999').text(`R$ ${fmt(c.ant)}`, 200, y, { width: 100 })
+        doc.fontSize(8).font('Helvetica').fillColor('#555').text('→', 295, y, { width: 15 })
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#000').text(`R$ ${fmt(c.atual)}`, 310, y, { width: 100 })
+        doc.fontSize(8).font('Helvetica-Bold').fillColor(cor).text(`${sinal}${variacao.toFixed(1)}%`, 415, y, { width: 60, align: 'right' })
+        y += 13
       })
     }
 
     // === ALERTA ===
-    if (alertas.length > 0) {
-      y += 15
-      doc.rect(40, y, pageWidth, 40).fill('#fef2f2').stroke('#fca5a5')
-      doc.fontSize(9).font('Helvetica-Bold').fillColor('#991b1b').text(`⚠ ${alertas[0].titulo}`, 50, y + 8, { width: pageWidth - 20 })
-      doc.fontSize(8).font('Helvetica').fillColor('#7f1d1d').text(alertas[0].mensagem, 50, y + 22, { width: pageWidth - 20 })
-      y += 50
+    if (alertas.length > 0 && y < doc.page.height - 80) {
+      y += 8
+      doc.rect(40, y, pageWidth, 36).fill('#fef2f2').stroke('#fca5a5')
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('#991b1b').text(`⚠ ${alertas[0].titulo}`, 48, y + 6, { width: pageWidth - 16 })
+      doc.fontSize(7.5).font('Helvetica').fillColor('#7f1d1d').text(alertas[0].mensagem, 48, y + 19, { width: pageWidth - 16 })
+      y += 44
     }
 
     // === RODAPÉ ===
-    const footerY = doc.page.height - 50
+    const footerY = doc.page.height - 45
     doc.moveTo(40, footerY).lineTo(40 + pageWidth, footerY).stroke('#ccc')
-    doc
-      .fontSize(8)
-      .font('Helvetica')
-      .fillColor('#999')
+    doc.fontSize(7.5).font('Helvetica').fillColor('#aaa')
       .text(
-        `Análise gerada pelo Radar Financeiro | ${fechamento.cliente.bpo.nome}`,
-        40,
-        footerY + 10,
-        { align: 'center', width: pageWidth }
+        `Gerado pelo Radar Financeiro | ${fechamento.cliente.bpo.nome} | ${new Date().toLocaleDateString('pt-BR')}`,
+        40, footerY + 8, { align: 'center', width: pageWidth }
       )
 
     doc.end()
-
-    stream.on('finish', async () => {
-      // Salvar URL do PDF no fechamento
-      const pdfUrl = `/relatorios/${fileName}`
-      await prisma.fechamento.update({
-        where: { id: fechamento.id },
-        data: { pdfUrl, pdfGeradoEm: new Date() },
-      })
-      resolve(filePath)
-    })
-
-    stream.on('error', reject)
   })
 }
