@@ -161,13 +161,15 @@ Responda APENAS com JSON válido, sem texto antes ou depois:
 
   const text = await chamarIA(prompt, 3000)
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  // Remove markdown code blocks se existirem
+  const clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+  const jsonMatch = clean.match(/\{[\s\S]*\}/)
   let estrategia: any = { diagnostico: text }
   if (jsonMatch) {
     try {
       estrategia = JSON.parse(jsonMatch[0])
     } catch {
-      estrategia = { diagnostico: text, erro_parse: true }
+      estrategia = { diagnostico: clean }
     }
   }
 
