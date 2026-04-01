@@ -44,6 +44,22 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// DB check
+app.get('/api/healthdb', async (_req, res) => {
+  try {
+    const { PrismaClient } = await import('@prisma/client')
+    const p = new PrismaClient()
+    await Promise.race([
+      p.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout 5s')), 5000))
+    ])
+    await p.$disconnect()
+    res.json({ db: 'ok' })
+  } catch (err: any) {
+    res.json({ db: 'erro', detalhe: err.message })
+  }
+})
+
 // Cron: todo dia às 8h verifica contas a pagar e envia lembretes
 cron.schedule('0 8 * * *', async () => {
   console.log('[Cron] Verificando contas a pagar...')
