@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getUsuario, isBpo } from '@/lib/auth-utils'
 import prisma from '@/server/lib/db'
-import { gerarRelatorio } from '@/server/lib/gerarRelatorio'
+import { gerarRelatorioPdf } from '@/server/lib/gerarRelatorio'
 
 export async function GET(req: NextRequest, { params }: { params: { clienteId: string } }) {
   try {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { clienteId: s
     const ano = parseInt(sp.get('ano') || '')
     if (!mes || !ano) return Response.json({ erro: 'mes e ano obrigatórios' }, { status: 400 })
 
-    const pdfBuffer = await gerarRelatorio(clienteId, mes, ano)
+    const pdfBuffer = await gerarRelatorioPdf(clienteId, mes, ano)
     return new Response(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',

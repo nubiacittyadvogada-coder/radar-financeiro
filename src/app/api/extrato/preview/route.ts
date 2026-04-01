@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ erro: 'Nenhuma transação encontrada no arquivo' }, { status: 400 })
     }
 
-    const categorizadas = await categorizarTransacoes(transacoes)
+    const categorizadas = await categorizarTransacoes(transacoes, 'Empresa', 'geral')
     return Response.json({ transacoes: categorizadas, total: categorizadas.length })
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })
