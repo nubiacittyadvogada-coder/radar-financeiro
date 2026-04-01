@@ -9,6 +9,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "server": "tsx src/server/index.ts",
+    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",

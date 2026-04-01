@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npx tsx src/server/index.ts",
+    "startCommand": "npx prisma generate && npx tsx src/server/index.ts",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
