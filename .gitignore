@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.production
+uploads/
+*.tsbuildinfo
+dist/
+coverage/
+scripts/tmp_*.ts
+*.log

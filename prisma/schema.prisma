@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Bpo {
+  id           String   @id @default(uuid())
+  nome         String
+  email        String   @unique
+  senhaHash    String
+  telefone     String?
+  plano        String   @default("basico")
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  clientes Cliente[]
+  usuarios UsuarioBpo[]
+}
+
+model UsuarioBpo {
+  id        String   @id @default(uuid())
+  bpoId     String
+  bpo       Bpo      @relation(fields: [bpoId], references: [id])
+  nome      String
+  email     String   @unique
+  senhaHash String
+  role      String   @default("operador")
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+}
+
+model Cliente {
+  id           String   @id @default(uuid())
+  bpoId        String
+  bpo          Bpo      @relation(fields: [bpoId], references: [id])
+  nomeEmpresa  String
+  cnpj         String?
+  setor        String?
+  responsavel  String?
+  telefone     String?
+  email        String?  @unique
+  senhaHash    String?
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Configurações de alerta
+  alertaWpp   Boolean  @default(false)
+  telefoneWpp String?
+  metaLucro   Decimal? @db.Decimal(12, 2)
+  metaReceita Decimal? @db.Decimal(12, 2)
+
+  importacoes        Importacao[]
+  fechamentos        Fechamento[]
+  alertas            Alerta[]
+  conversasIA        ConversaIA[]
+  contasPagar        ContaPagar[]
+  lancamentosManuais LancamentoManual[]
+}
+
+model Importacao {
+  id                String   @id @default(uuid())
+  clienteId         String
+  cliente           Cliente  @relation(fields: [clienteId], references: [id])
+  tipo              String   // 'receitas' | 'despesas' | 'dre'
+  nomeArquivo       String
+  mes               Int
+  ano               Int
+  status            String   @default("processando") // 'processando' | 'concluido' | 'erro'
+  erro              String?
+  totalLinhas       Int?
+  linhasProcessadas Int?
+  criadoEm          DateTime @default(now())
+
+  lancamentos Lancamento[]
+}
+
+model Lancamento {
+  id           String     @id @default(uuid())
+  importacaoId String
+  importacao   Importacao @relation(fields: [importacaoId], references: [id])
+  clienteId    String
+  mes          Int
+  ano          Int
+
+  // Dados originais do Excel
+  favorecido      String?
+  planoConta      String
+  grupoConta      String // derivado do prefixo (01_RPS, 02_IMP, etc.)
+  area            String?
+  advogado        String? // só existe em receitas
+  descricao       String?
+  dataCompetencia DateTime?
+  valor           Decimal   @db.Decimal(12, 2)
+  dataVencimento  DateTime?
+  statusPg        String? // 'OK PG' | 'PREV' | 'PG'
+  dataPagamento   DateTime?
+  formaPagamento  String?
+  banco           String?
+  conciliado      Boolean   @default(false)
+  observacoes     String?
+
+  // Classificação derivada pelo classificador
+  tipo    String // 'receita' | 'imposto' | 'custo_direto' | 'pessoal' | 'marketing' | 'geral' | 'retirada' | 'financeiro' | 'distribuicao' | 'investimento' | 'emprestimo' | 'aplicacao' | 'aporte' | 'parcelamento'
+  subtipo String?
+  previsto Boolean @default(false)
+}
+
+model Fechamento {
+  id           String   @id @default(uuid())
+  clienteId    String
+  cliente      Cliente  @relation(fields: [clienteId], references: [id])
+  mes          Int
+  ano          Int
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Receitas
+  receitaBruta          Decimal @db.Decimal(12, 2) @default(0)
+  honHonorariosIniciais Decimal @db.Decimal(12, 2) @default(0)
+  honHonorariosMensais  Decimal @db.Decimal(12, 2) @default(0)
+  honConsultas          Decimal @db.Decimal(12, 2) @default(0)
+  honExito              Decimal @db.Decimal(12, 2) @default(0)
+  honMultaCancelamento  Decimal @db.Decimal(12, 2) @default(0)
+  repasseExito          Decimal @db.Decimal(12, 2) @default(0)
+  impostos              Decimal @db.Decimal(12, 2) @default(0)
+  receitaLiquida        Decimal @db.Decimal(12, 2) @default(0)
+
+  // Custos diretos
+  custosDiretos      Decimal @db.Decimal(12, 2) @default(0)
+  margemContribuicao Decimal @db.Decimal(12, 2) @default(0)
+  percMargem         Decimal @db.Decimal(6, 2)  @default(0)
+
+  // Despesas ADM
+  despesasPessoal   Decimal @db.Decimal(12, 2) @default(0)
+  despesasMarketing Decimal @db.Decimal(12, 2) @default(0)
+  despesasGerais    Decimal @db.Decimal(12, 2) @default(0)
+  totalDespesasAdm  Decimal @db.Decimal(12, 2) @default(0)
+
+  // Resultado operacional
+  lucroOperacional Decimal @db.Decimal(12, 2) @default(0)
+  percLucroOp      Decimal @db.Decimal(6, 2)  @default(0)
+
+  // Retirada e financeiro
+  retiradaSocios      Decimal @db.Decimal(12, 2) @default(0)
+  resultadoFinanceiro Decimal @db.Decimal(12, 2) @default(0) // receita juros - despesa juros
+  receitaJuros        Decimal @db.Decimal(12, 2) @default(0)
+  despesaJuros        Decimal @db.Decimal(12, 2) @default(0)
+
+  // Lucro líquido = lucroOp - retirada + resultadoFinanceiro
+  lucroLiquido Decimal @db.Decimal(12, 2) @default(0)
+  percLucroLiq Decimal @db.Decimal(6, 2)  @default(0)
+
+  // Abaixo da linha (compõem resultado de caixa)
+  distribuicaoLucros   Decimal @db.Decimal(12, 2) @default(0)
+  investimentos        Decimal @db.Decimal(12, 2) @default(0)
+  emprestimosEntrada   Decimal @db.Decimal(12, 2) @default(0)
+  emprestimosPagamento Decimal @db.Decimal(12, 2) @default(0)
+  parcelamentoImpostos Decimal @db.Decimal(12, 2) @default(0)
+  resgateAplicacao     Decimal @db.Decimal(12, 2) @default(0)
+  aplicacaoFinanceira  Decimal @db.Decimal(12, 2) @default(0)
+  aporteSocios         Decimal @db.Decimal(12, 2) @default(0)
+
+  // Caixa
+  resultadoCaixa Decimal? @db.Decimal(12, 2)
+  saldoAnterior  Decimal? @db.Decimal(12, 2)
+  saldoFinal     Decimal? @db.Decimal(12, 2)
+
+  // Por setor (JSON)
+  resultadosPorSetor Json?
+
+  // Previsão
+  receitaPrevista  Decimal? @db.Decimal(12, 2)
+  despesaPrevista  Decimal? @db.Decimal(12, 2)
+
+  pdfUrl      String?
+  pdfGeradoEm DateTime?
+
+  @@unique([clienteId, mes, ano])
+}
+
+model Alerta {
+  id        String    @id @default(uuid())
+  clienteId String
+  cliente   Cliente   @relation(fields: [clienteId], references: [id])
+  tipo      String
+  titulo    String
+  mensagem  String
+  canal     String    @default("whatsapp")
+  enviado   Boolean   @default(false)
+  enviadoEm DateTime?
+  erro      String?
+  criadoEm  DateTime  @default(now())
+}
+
+model ConversaIA {
+  id          String   @id @default(uuid())
+  clienteId   String
+  cliente     Cliente  @relation(fields: [clienteId], references: [id])
+  pergunta    String
+  resposta    String
+  contextoMes Int?
+  contextoAno Int?
+  criadoEm    DateTime @default(now())
+}
+
+model ContaPagar {
+  id           String    @id @default(uuid())
+  clienteId    String
+  cliente      Cliente   @relation(fields: [clienteId], references: [id])
+  descricao    String
+  fornecedor   String?
+  valor        Decimal   @db.Decimal(12, 2)
+  vencimento   DateTime
+  recorrente   Boolean   @default(false)
+  frequencia   String?   // 'mensal' | 'quinzenal' | 'semanal' | 'anual'
+  status       String    @default("pendente") // 'pendente' | 'pago' | 'atrasado'
+  pagoEm       DateTime?
+  categoria    String?
+  observacoes  String?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+}
+
+model LancamentoManual {
+  id          String    @id @default(uuid())
+  clienteId   String
+  cliente     Cliente   @relation(fields: [clienteId], references: [id])
+  tipo        String    // 'receita' | 'despesa'
+  descricao   String
+  favorecido  String?
+  planoConta  String
+  grupoConta  String
+  tipoContabil String   // classificado pelo classificador
+  valor       Decimal   @db.Decimal(12, 2)
+  data        DateTime
+  mes         Int
+  ano         Int
+  previsto    Boolean   @default(false)
+  observacoes String?
+  criadoEm    DateTime  @default(now())
+}
