@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const estrategia = await gerarEstrategia(clienteId)
     return Response.json(estrategia)
   } catch (err: any) {
-    return Response.json({ erro: err.message }, { status: 500 })
+    console.error('[estrategia] erro:', err)
+    return Response.json({ erro: err.message, tipo: err.constructor?.name, detalhes: String(err) }, { status: 500 })
   }
 }
