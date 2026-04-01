@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: { clienteId: s
     if (!mes || !ano) return Response.json({ erro: 'mes e ano obrigatórios' }, { status: 400 })
 
     const pdfBuffer = await gerarRelatorioPdf(clienteId, mes, ano)
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="relatorio-${mes}-${ano}.pdf"`,
