@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { getUsuario } from '@/lib/auth-utils'
 import { responderPergunta } from '@/server/lib/iaFinanceira'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   try {
     const u = getUsuario(req)

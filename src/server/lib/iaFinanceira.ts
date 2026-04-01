@@ -107,7 +107,7 @@ ${maioresDespesas.length > 0 ? `MAIORES DESPESAS DO MÊS:
 ${maioresDespesas.map((d: any) => `${d.favorecido || 'N/I'}: R$ ${fmt(Math.abs(Number(d.valor)))} (${d.planoConta})`).join('\n')}` : ''}`
 
   const message = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 300,
     messages: [
       {
@@ -211,7 +211,7 @@ Gere a estratégia em formato JSON com exatamente esta estrutura:
 }`
 
   const message = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 4000,
     messages: [{ role: 'user', content: contexto }],
   })
