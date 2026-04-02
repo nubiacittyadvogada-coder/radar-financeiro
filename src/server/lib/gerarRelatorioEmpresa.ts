@@ -1,4 +1,4 @@
-import PDFDocument from 'pdfkit'
+import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib'
 import prisma from './db'
 
 const MESES_PT = [
@@ -40,120 +40,163 @@ export async function gerarRelatorioEmpresaPdf(
     take: 5,
   })
 
-  const doc = new PDFDocument({ margin: 50, size: 'A4' })
-  const chunks: Buffer[] = []
-  doc.on('data', (chunk) => chunks.push(chunk))
+  // ── Criar documento ──────────────────────────────────────────────────────
+  const pdfDoc = await PDFDocument.create()
+  const page = pdfDoc.addPage(PageSizes.A4)
+  const { width, height } = page.getSize()
+
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const fontReg  = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   const nomeEmpresa = fechamento.contaEmpresa.nomeEmpresa || 'Empresa'
 
-  // ── Cabeçalho ─────────────────────────────────────────────────────────────
-  doc.fontSize(20).font('Helvetica-Bold').text('Radar Financeiro', 50, 50)
-  doc.fontSize(12).font('Helvetica').text(`Relatório Mensal — ${nomeEmpresa}`, 50, 80)
-  doc.fontSize(14).font('Helvetica-Bold')
-    .text(`${MESES_PT[mes]} de ${ano}`, 50, 100)
-  doc.moveTo(50, 125).lineTo(545, 125).stroke()
+  const black  = rgb(0, 0, 0)
+  const gray   = rgb(0.5, 0.5, 0.5)
+  const green  = rgb(0.09, 0.64, 0.16)
+  const red    = rgb(0.86, 0.15, 0.15)
+  const blue   = rgb(0.11, 0.44, 0.80)
 
-  let y = 140
+  let y = height - 50
 
-  const row = (label: string, value: string, bold = false, indent = 0) => {
-    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10)
-    doc.text(label, 50 + indent, y, { width: 300 })
-    doc.text(`R$ ${value}`, 350, y, { width: 195, align: 'right' })
-    y += 18
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const text = (t: string, x: number, yPos: number, opts: {
+    font?: typeof fontBold,
+    size?: number,
+    color?: ReturnType<typeof rgb>,
+    align?: 'left' | 'right',
+    maxWidth?: number,
+  } = {}) => {
+    const f = opts.font ?? fontReg
+    const s = opts.size ?? 10
+    const c = opts.color ?? black
+    let drawX = x
+    if (opts.align === 'right' && opts.maxWidth) {
+      const tw = f.widthOfTextAtSize(t, s)
+      drawX = x + opts.maxWidth - tw
+    }
+    page.drawText(t, { x: drawX, y: yPos, font: f, size: s, color: c })
+  }
+
+  const hLine = (yPos: number) => {
+    page.drawLine({ start: { x: 50, y: yPos }, end: { x: width - 50, y: yPos }, thickness: 0.5, color: gray })
+  }
+
+  const row = (label: string, value: string, bold = false, indent = 0, valueColor?: ReturnType<typeof rgb>) => {
+    const f = bold ? fontBold : fontReg
+    text(label, 50 + indent, y, { font: f, size: 10 })
+    text(`R$ ${value}`, 355, y, { font: f, size: 10, color: valueColor ?? black, align: 'right', maxWidth: 190 })
+    y -= 18
   }
 
   const sep = () => {
-    y += 4
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).stroke()
-    y += 8
+    y -= 4
+    hLine(y)
+    y -= 10
   }
 
-  // ── DRE ───────────────────────────────────────────────────────────────────
-  doc.font('Helvetica-Bold').fontSize(12).text('DEMONSTRATIVO DE RESULTADO', 50, y)
-  y += 20
+  // ── Cabeçalho ────────────────────────────────────────────────────────────
+  text('Radar Financeiro', 50, y, { font: fontBold, size: 20, color: blue })
+  y -= 25
+  text(`Relatório Mensal — ${nomeEmpresa}`, 50, y, { font: fontReg, size: 12 })
+  y -= 18
+  text(`${MESES_PT[mes]} de ${ano}`, 50, y, { font: fontBold, size: 14 })
+  y -= 15
+  hLine(y)
+  y -= 18
 
-  row('Receita Bruta', fmt(fechamento.receitaBruta), true)
+  // ── DRE ──────────────────────────────────────────────────────────────────
+  text('DEMONSTRATIVO DE RESULTADO', 50, y, { font: fontBold, size: 12 })
+  y -= 20
+
+  const recBruta = Number(fechamento.receitaBruta || 0)
+  const lucroLiq = Number(fechamento.lucroLiquido || 0)
+
+  row('Receita Bruta', fmt(fechamento.receitaBruta), true, 0,
+    recBruta >= 0 ? green : red)
   row('(-) Repasse Êxito', `(${fmt(fechamento.repasseExito)})`, false, 15)
   row('(-) Impostos', `(${fmt(fechamento.impostos)})`, false, 15)
   sep()
-  row(`Receita Líquida`, fmt(fechamento.receitaLiquida), true)
+  row('Receita Líquida', fmt(fechamento.receitaLiquida), true)
   row('(-) Custos Diretos', `(${fmt(fechamento.custosDiretos)})`, false, 15)
   sep()
   row(`Margem de Contribuição (${fmtPct(fechamento.percMargem)})`, fmt(fechamento.margemContribuicao), true)
 
-  y += 6
-  doc.font('Helvetica-Oblique').fontSize(9).text('Despesas ADM:', 50, y)
-  y += 15
-  row('Pessoal', fmt(fechamento.despesasPessoal), false, 15)
-  row('Marketing', fmt(fechamento.despesasMarketing), false, 15)
-  row('Gerais', fmt(fechamento.despesasGerais), false, 15)
+  y -= 4
+  text('Despesas ADM:', 50, y, { font: fontReg, size: 9, color: gray })
+  y -= 16
+  row('Pessoal',    fmt(fechamento.despesasPessoal),  false, 15)
+  row('Marketing',  fmt(fechamento.despesasMarketing), false, 15)
+  row('Gerais',     fmt(fechamento.despesasGerais),    false, 15)
   sep()
   row(`Lucro Operacional (${fmtPct(fechamento.percLucroOp)})`, fmt(fechamento.lucroOperacional), true)
   row('(-) Retirada Sócios', `(${fmt(fechamento.retiradaSocios)})`, false, 15)
   row('Resultado Financeiro', fmt(fechamento.resultadoFinanceiro), false, 15)
   sep()
-  row(`LUCRO LÍQUIDO (${fmtPct(fechamento.percLucroLiq)})`, fmt(fechamento.lucroLiquido), true)
+  row(
+    `LUCRO LÍQUIDO (${fmtPct(fechamento.percLucroLiq)})`,
+    fmt(fechamento.lucroLiquido),
+    true, 0,
+    lucroLiq >= 0 ? green : red
+  )
 
-  // ── Comparativo ───────────────────────────────────────────────────────────
+  // ── Comparativo ──────────────────────────────────────────────────────────
   if (anterior) {
-    y += 20
-    doc.font('Helvetica-Bold').fontSize(12).text('COMPARATIVO COM MÊS ANTERIOR', 50, y)
-    y += 20
+    y -= 16
+    text('COMPARATIVO COM MÊS ANTERIOR', 50, y, { font: fontBold, size: 12 })
+    y -= 18
 
-    const delta = (atual: any, ant: any) => {
-      const d = Number(atual || 0) - Number(ant || 0)
-      return d >= 0 ? `▲ R$ ${fmt(d)}` : `▼ R$ ${fmt(Math.abs(d))}`
-    }
+    // Cabeçalho da tabela
+    text('Indicador',        50,  y, { font: fontBold, size: 9 })
+    text(MESES_PT[mesAnt],  270,  y, { font: fontBold, size: 9, align: 'right', maxWidth: 90 })
+    text(MESES_PT[mes],     360,  y, { font: fontBold, size: 9, align: 'right', maxWidth: 90 })
+    text('Variação',        450,  y, { font: fontBold, size: 9, align: 'right', maxWidth: 95 })
+    y -= 12
+    hLine(y)
+    y -= 10
 
-    doc.font('Helvetica').fontSize(10)
-    const rows2 = [
-      ['Receita Bruta', fmt(anterior.receitaBruta), fmt(fechamento.receitaBruta), delta(fechamento.receitaBruta, anterior.receitaBruta)],
-      ['Lucro Líquido', fmt(anterior.lucroLiquido), fmt(fechamento.lucroLiquido), delta(fechamento.lucroLiquido, anterior.lucroLiquido)],
+    const compRows = [
+      ['Receita Bruta',   fechamento.receitaBruta,   anterior.receitaBruta],
+      ['Receita Líquida', fechamento.receitaLiquida,  anterior.receitaLiquida],
+      ['Lucro Líquido',   fechamento.lucroLiquido,    anterior.lucroLiquido],
     ]
-    doc.text('Indicador', 50, y, { width: 180 })
-    doc.text(`${MESES_PT[mesAnt]}`, 230, y, { width: 100, align: 'right' })
-    doc.text(`${MESES_PT[mes]}`, 330, y, { width: 100, align: 'right' })
-    doc.text('Variação', 430, y, { width: 115, align: 'right' })
-    y += 15
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).stroke()
-    y += 8
 
-    for (const [label, ant, atual, var_] of rows2) {
-      doc.font('Helvetica').fontSize(10)
-      doc.text(label, 50, y, { width: 180 })
-      doc.text(`R$ ${ant}`, 230, y, { width: 100, align: 'right' })
-      doc.text(`R$ ${atual}`, 330, y, { width: 100, align: 'right' })
-      const isPos = var_.startsWith('▲')
-      doc.fillColor(isPos ? '#16a34a' : '#dc2626').text(var_, 430, y, { width: 115, align: 'right' })
-      doc.fillColor('#000000')
-      y += 18
+    for (const [label, atual, ant] of compRows) {
+      const d = Number(atual || 0) - Number(ant || 0)
+      const varStr = d >= 0 ? `+R$ ${fmt(d)}` : `-R$ ${fmt(Math.abs(d))}`
+      text(String(label),      50,  y, { size: 9 })
+      text(`R$ ${fmt(ant)}`,  270,  y, { size: 9, align: 'right', maxWidth: 90 })
+      text(`R$ ${fmt(atual)}`,360,  y, { size: 9, align: 'right', maxWidth: 90 })
+      text(varStr,            450,  y, { size: 9, color: d >= 0 ? green : red, align: 'right', maxWidth: 95 })
+      y -= 16
     }
   }
 
-  // ── Maiores despesas ──────────────────────────────────────────────────────
+  // ── Maiores despesas ─────────────────────────────────────────────────────
   if (maioresDespesas.length > 0) {
-    y += 20
-    doc.font('Helvetica-Bold').fontSize(12).text('MAIORES DESPESAS DO PERÍODO', 50, y)
-    y += 20
+    y -= 10
+    text('MAIORES DESPESAS DO PERÍODO', 50, y, { font: fontBold, size: 12 })
+    y -= 18
 
     for (const d of maioresDespesas) {
-      doc.font('Helvetica').fontSize(10)
-      doc.text(d.favorecido || d.planoConta || 'Despesa', 50, y, { width: 350 })
-      doc.text(`R$ ${fmt(Math.abs(Number(d.valor)))}`, 400, y, { width: 145, align: 'right' })
-      y += 16
+      const label = d.favorecido || d.planoConta || 'Despesa'
+      text(label, 50, y, { size: 10 })
+      text(`R$ ${fmt(Math.abs(Number(d.valor)))}`, 355, y, { size: 10, color: red, align: 'right', maxWidth: 190 })
+      y -= 16
     }
   }
 
-  // ── Rodapé ────────────────────────────────────────────────────────────────
-  doc.fontSize(8).fillColor('#888888')
-    .text(
-      `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} | Radar Financeiro`,
-      50, 780, { align: 'center', width: 495 }
-    )
-
-  doc.end()
-
-  return new Promise((resolve) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
+  // ── Rodapé ───────────────────────────────────────────────────────────────
+  const rodape = `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} | Radar Financeiro`
+  const rodapeW = fontReg.widthOfTextAtSize(rodape, 8)
+  page.drawText(rodape, {
+    x: (width - rodapeW) / 2,
+    y: 30,
+    font: fontReg,
+    size: 8,
+    color: gray,
   })
+
+  // ── Salvar ───────────────────────────────────────────────────────────────
+  const pdfBytes = await pdfDoc.save()
+  return Buffer.from(pdfBytes)
 }
