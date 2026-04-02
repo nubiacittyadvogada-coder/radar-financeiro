@@ -9,3 +9,5 @@ dist/
 coverage/
 scripts/tmp_*.ts
 *.log
+
+.vercel
