@@ -149,7 +149,7 @@ class ApiClient {
 
   // Relatório
   getRelatorioUrl(clienteId: string, mes: number, ano: number) {
-    return `${API_URL}/api/relatorio/${clienteId}/${mes}/${ano}/pdf`
+    return `${API_URL}/api/relatorio/${clienteId}?mes=${mes}&ano=${ano}`
   }
 
   // Lançamentos Manuais
