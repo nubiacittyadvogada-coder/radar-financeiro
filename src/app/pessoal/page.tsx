@@ -12,6 +12,16 @@ const CARTOES = ['Nubank', 'Inter', 'XP', 'Itaú', 'Bradesco', 'Santander', 'C6 
 const MESES_FULL = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const MESES_ABREV = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
+type TransacaoPreview = {
+  data: string
+  descricao: string
+  tipo: 'receita' | 'despesa'
+  valor: number
+  categoria: string
+  cartao?: string
+  selecionada: boolean
+}
+
 export default function PessoalPage() {
   const router = useRouter()
   const [aba, setAba] = useState<'extrato' | 'anual' | 'cartoes' | 'analise'>('extrato')
@@ -29,6 +39,13 @@ export default function PessoalPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [importando, setImportando] = useState(false)
+
+  // Preview de importação
+  const [preview, setPreview] = useState<TransacaoPreview[] | null>(null)
+  const [previewInfo, setPreviewInfo] = useState<{ banco?: string; periodo?: string; observacoes?: string; fonte?: string } | null>(null)
+  const [filtroPreviewMes, setFiltroPreviewMes] = useState(0) // 0 = todos
+  const [filtroPreviewAno, setFiltroPreviewAno] = useState(0) // 0 = todos
+  const [salvandoPreview, setSalvandoPreview] = useState(false)
 
   const hoje = new Date()
   const [mes, setMes] = useState(hoje.getMonth() + 1)
@@ -105,7 +122,6 @@ export default function PessoalPage() {
     }
   }
 
-  // Agrupa transações anuais por mês
   const resumoAnual = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1
     const ts = transacoesAnual.filter(t => t.mes === m)
@@ -130,16 +146,7 @@ export default function PessoalPage() {
       const res = await fetch('/api/pessoal/transacoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          clienteId,
-          tipo: fTipo,
-          descricao: fDescricao,
-          valor: fValor,
-          data: fData,
-          categoria: fCategoria,
-          cartao: fCartao || undefined,
-          observacoes: fObs || undefined,
-        })
+        body: JSON.stringify({ clienteId, tipo: fTipo, descricao: fDescricao, valor: fValor, data: fData, categoria: fCategoria, cartao: fCartao || undefined, observacoes: fObs || undefined })
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.erro) }
       setSucesso('Transação adicionada!')
@@ -194,6 +201,14 @@ export default function PessoalPage() {
     XLSX.writeFile(wb, 'modelo_financas_pessoais.xlsx')
   }
 
+  function abrirPreview(transacoesRaw: any[], info: { banco?: string; periodo?: string; observacoes?: string; fonte?: string }) {
+    const com_selecao: TransacaoPreview[] = transacoesRaw.map(t => ({ ...t, selecionada: true }))
+    setPreview(com_selecao)
+    setPreviewInfo(info)
+    setFiltroPreviewMes(0)
+    setFiltroPreviewAno(0)
+  }
+
   async function importarExcel(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !clienteId) return
@@ -204,53 +219,33 @@ export default function PessoalPage() {
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: false })
-
       if (rows.length === 0) throw new Error('Planilha vazia')
 
-      const transacoesImport = rows.map((row: any, idx: number) => {
-        // Suporta data em formato dd/mm/aaaa ou aaaa-mm-dd
+      const transacoesImport: TransacaoPreview[] = rows.map((row: any, idx: number) => {
         let data = row['data'] || row['Data'] || row['DATA']
         if (!data) throw new Error(`Linha ${idx + 2}: campo "data" obrigatório`)
-
-        // Converte dd/mm/aaaa → aaaa-mm-dd
         if (typeof data === 'string' && data.includes('/')) {
           const [d, m, a] = data.split('/')
           data = `${a}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
         }
-
         const descricao = row['descricao'] || row['Descricao'] || row['descrição'] || row['Descrição'] || row['DESCRICAO']
-        const tipo = String(row['tipo'] || row['Tipo'] || row['TIPO'] || 'despesa').toLowerCase().trim()
-        const valorRaw = row['valor'] || row['Valor'] || row['VALOR']
+        const tipo = String(row['tipo'] || row['Tipo'] || 'despesa').toLowerCase().trim() as 'receita' | 'despesa'
+        const valorRaw = row['valor'] || row['Valor']
         const valor = parseFloat(String(valorRaw).replace(',', '.'))
-
         if (!descricao) throw new Error(`Linha ${idx + 2}: campo "descricao" obrigatório`)
-        if (isNaN(valor)) throw new Error(`Linha ${idx + 2}: "valor" inválido (${valorRaw})`)
-        if (!['receita', 'despesa'].includes(tipo)) throw new Error(`Linha ${idx + 2}: "tipo" deve ser "receita" ou "despesa"`)
-
+        if (isNaN(valor)) throw new Error(`Linha ${idx + 2}: "valor" inválido`)
         return {
           data,
           descricao: String(descricao).trim(),
           tipo,
           valor,
-          categoria: row['categoria'] || row['Categoria'] || row['CATEGORIA'] || 'Outros',
-          cartao: row['cartao'] || row['Cartao'] || row['cartão'] || row['Cartão'] || '',
-          observacoes: row['observacoes'] || row['Observacoes'] || row['observações'] || '',
+          categoria: row['categoria'] || row['Categoria'] || 'Outros',
+          cartao: row['cartao'] || row['Cartao'] || row['cartão'] || '',
+          selecionada: true,
         }
       })
 
-      const token = localStorage.getItem('radar_token')
-      const res = await fetch('/api/pessoal/transacoes/importar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ clienteId, transacoes: transacoesImport })
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.erro)
-
-      setSucesso(`${result.total} transações importadas com sucesso!`)
-      setTimeout(() => setSucesso(''), 5000)
-      carregarTransacoes()
-      if (aba === 'anual') carregarAnual()
+      abrirPreview(transacoesImport, { fonte: 'Excel', banco: file.name })
     } catch (e: any) {
       setErro(e.message)
     } finally {
@@ -259,11 +254,96 @@ export default function PessoalPage() {
     }
   }
 
+  async function importarPdf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !clienteId) return
+    setImportando(true)
+    setErro('')
+    try {
+      const token = localStorage.getItem('radar_token')
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/pessoal/transacoes/importar-pdf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      abrirPreview(data.transacoes, { banco: data.banco, periodo: data.periodo, observacoes: data.observacoes, fonte: 'PDF' })
+    } catch (e: any) {
+      setErro(e.message)
+    } finally {
+      setImportando(false)
+      e.target.value = ''
+    }
+  }
+
+  async function confirmarImport() {
+    if (!preview || !clienteId) return
+    setSalvandoPreview(true)
+    setErro('')
+    try {
+      const selecionadas = previewFiltradas.filter(t => t.selecionada)
+      if (selecionadas.length === 0) { setErro('Selecione ao menos uma transação'); return }
+
+      const token = localStorage.getItem('radar_token')
+      const res = await fetch('/api/pessoal/transacoes/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clienteId, transacoes: selecionadas })
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.erro)
+
+      setSucesso(`${result.total} transações importadas com sucesso!`)
+      setTimeout(() => setSucesso(''), 5000)
+      setPreview(null)
+      setPreviewInfo(null)
+      carregarTransacoes()
+      if (aba === 'anual') carregarAnual()
+    } catch (e: any) {
+      setErro(e.message)
+    } finally {
+      setSalvandoPreview(false)
+    }
+  }
+
+  // Anos presentes no preview
+  const anosPreview = preview ? [...new Set(preview.map(t => new Date(t.data).getFullYear()))].sort() : []
+  const mesesPreview = preview ? [...new Set(preview.map(t => new Date(t.data).getMonth() + 1))].sort((a, b) => a - b) : []
+
+  const previewFiltradas = (preview || []).filter(t => {
+    const d = new Date(t.data)
+    if (filtroPreviewMes && d.getMonth() + 1 !== filtroPreviewMes) return false
+    if (filtroPreviewAno && d.getFullYear() !== filtroPreviewAno) return false
+    return true
+  })
+
+  function togglePreviewItem(idx: number) {
+    setPreview(prev => prev!.map((t, i) => {
+      // Índice no array filtrado
+      const filtrado = previewFiltradas[idx]
+      if (t === filtrado) return { ...t, selecionada: !t.selecionada }
+      return t
+    }))
+  }
+
+  function selecionarTodas(val: boolean) {
+    setPreview(prev => prev!.map(t => {
+      const noFiltro = previewFiltradas.includes(t)
+      if (noFiltro) return { ...t, selecionada: val }
+      return t
+    }))
+  }
+
   if (loadingSetup) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">Carregando...</p></div>
 
   const transacoesFiltradas = filtroTipo === 'todos' ? transacoes : transacoes.filter(t => t.tipo === filtroTipo)
   const cartaoTransacoes = transacoes.filter(t => t.grupoConta === 'pessoal_cartao')
   const cartoesUnicos = [...new Set(cartaoTransacoes.map(t => t.tipoContabil || 'Sem nome'))]
+
+  const totalSelecionadas = previewFiltradas.filter(t => t.selecionada).length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -309,6 +389,100 @@ export default function PessoalPage() {
         </div>
       </div>
 
+      {/* ===== MODAL PREVIEW IMPORT ===== */}
+      {preview && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            {/* Header modal */}
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Prévia da importação {previewInfo?.fonte && `— ${previewInfo.fonte}`}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {previewInfo?.banco && <span className="font-medium">{previewInfo.banco}</span>}
+                  {previewInfo?.periodo && <span> · {previewInfo.periodo}</span>}
+                </p>
+              </div>
+              <button onClick={() => setPreview(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+            </div>
+
+            {/* Filtros */}
+            <div className="px-6 py-3 border-b bg-gray-50 flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-medium text-gray-500">Filtrar:</span>
+              <select
+                value={filtroPreviewAno}
+                onChange={e => setFiltroPreviewAno(+e.target.value)}
+                className="px-2 py-1 border rounded text-sm"
+              >
+                <option value={0}>Todos os anos</option>
+                {anosPreview.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <select
+                value={filtroPreviewMes}
+                onChange={e => setFiltroPreviewMes(+e.target.value)}
+                className="px-2 py-1 border rounded text-sm"
+              >
+                <option value={0}>Todos os meses</option>
+                {mesesPreview.map(m => <option key={m} value={m}>{MESES_FULL[m]}</option>)}
+              </select>
+              <span className="text-xs text-gray-400 ml-auto">
+                {previewFiltradas.length} transação(ões) visíveis
+              </span>
+              <button onClick={() => selecionarTodas(true)} className="text-xs text-blue-600 hover:underline">Marcar todas</button>
+              <button onClick={() => selecionarTodas(false)} className="text-xs text-gray-500 hover:underline">Desmarcar todas</button>
+            </div>
+
+            {/* Lista */}
+            <div className="overflow-y-auto flex-1 divide-y">
+              {previewFiltradas.length === 0 ? (
+                <p className="text-center text-gray-400 py-10">Nenhuma transação para este filtro</p>
+              ) : (
+                previewFiltradas.map((t, i) => (
+                  <label key={i} className={`flex items-center gap-3 px-6 py-2.5 cursor-pointer hover:bg-gray-50 ${!t.selecionada ? 'opacity-40' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={t.selecionada}
+                      onChange={() => togglePreviewItem(i)}
+                      className="w-4 h-4 rounded accent-blue-600"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{t.descricao}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(t.data).toLocaleDateString('pt-BR')} · {t.categoria}
+                        {t.cartao && <span className="ml-1 text-purple-500">💳 {t.cartao}</span>}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-semibold flex-shrink-0 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
+                      {t.tipo === 'receita' ? '+' : '-'}{formatarMoeda(t.valor)}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                <span className="font-bold text-blue-600">{totalSelecionadas}</span> selecionadas para importar
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setPreview(null)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarImport}
+                  disabled={salvandoPreview || totalSelecionadas === 0}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {salvandoPreview ? 'Importando...' : `Importar ${totalSelecionadas} transação(ões)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-5xl mx-auto px-6 py-6 space-y-5">
         {erro && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{erro} <button onClick={() => setErro('')} className="ml-2 font-bold">✕</button></div>}
         {sucesso && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{sucesso}</div>}
@@ -316,7 +490,6 @@ export default function PessoalPage() {
         {/* ===== ABA EXTRATO ===== */}
         {aba === 'extrato' && (
           <div className="space-y-4">
-            {/* Cards de resumo */}
             {stats && (
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4">
@@ -334,14 +507,12 @@ export default function PessoalPage() {
               </div>
             )}
 
-            {/* Barra de ações */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <h2 className="font-semibold text-gray-700">
                   {MESES_FULL[mes]} {ano}
                   <span className="text-sm font-normal text-gray-400 ml-2">({transacoes.length})</span>
                 </h2>
-                {/* Filtro tipo */}
                 <div className="flex rounded-lg border overflow-hidden text-xs">
                   {(['todos', 'receita', 'despesa'] as const).map(f => (
                     <button
@@ -359,17 +530,18 @@ export default function PessoalPage() {
                 </div>
               </div>
 
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center flex-wrap">
+                {/* Importar PDF */}
+                <label className={`px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition ${importando ? 'bg-gray-100 text-gray-400' : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'}`}>
+                  {importando ? 'Lendo...' : '📄 Importar PDF'}
+                  <input type="file" accept=".pdf" className="hidden" onChange={importarPdf} disabled={importando} />
+                </label>
                 {/* Importar Excel */}
                 <label className={`px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition ${importando ? 'bg-gray-100 text-gray-400' : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'}`}>
-                  {importando ? 'Importando...' : '📥 Importar Excel'}
+                  {importando ? 'Lendo...' : '📥 Importar Excel'}
                   <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importarExcel} disabled={importando} />
                 </label>
-                <button
-                  onClick={baixarModelo}
-                  className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"
-                  title="Baixar modelo de planilha"
-                >
+                <button onClick={baixarModelo} className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200" title="Baixar modelo Excel">
                   ⬇ Modelo
                 </button>
                 <button
@@ -403,112 +575,56 @@ export default function PessoalPage() {
                       ))}
                     </div>
                   </div>
-
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Descrição *</label>
-                    <input
-                      type="text"
-                      value={fDescricao}
-                      onChange={e => setFDescricao(e.target.value)}
-                      placeholder={fTipo === 'receita' ? 'Ex: Salário abril' : 'Ex: Mercado, Uber, Netflix...'}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
+                    <input type="text" value={fDescricao} onChange={e => setFDescricao(e.target.value)} placeholder={fTipo === 'receita' ? 'Ex: Salário abril' : 'Ex: Mercado, Uber, Netflix...'} className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" required />
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Valor (R$) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={fValor}
-                      onChange={e => setFValor(e.target.value)}
-                      placeholder="0,00"
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
+                    <input type="number" step="0.01" min="0" value={fValor} onChange={e => setFValor(e.target.value)} placeholder="0,00" className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" required />
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Data *</label>
-                    <input
-                      type="date"
-                      value={fData}
-                      onChange={e => setFData(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
+                    <input type="date" value={fData} onChange={e => setFData(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" required />
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Categoria</label>
-                    <select
-                      value={fCategoria}
-                      onChange={e => setFCategoria(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                      {(fTipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA).map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
+                    <select value={fCategoria} onChange={e => setFCategoria(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      {(fTipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
-
                   {fTipo === 'despesa' && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Cartão (opcional)</label>
-                      <select
-                        value={fCartao}
-                        onChange={e => setFCartao(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      >
+                      <select value={fCartao} onChange={e => setFCartao(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                         <option value="">Débito / Pix / Dinheiro</option>
                         {CARTOES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   )}
-
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Observações</label>
-                    <input
-                      type="text"
-                      value={fObs}
-                      onChange={e => setFObs(e.target.value)}
-                      placeholder="Opcional"
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    />
+                    <input type="text" value={fObs} onChange={e => setFObs(e.target.value)} placeholder="Opcional" className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                   </div>
-
                   <div className="col-span-2 flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={salvando}
-                      className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-                    >
+                    <button type="submit" disabled={salvando} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                       {salvando ? 'Salvando...' : 'Salvar'}
                     </button>
-                    <button type="button" onClick={() => setMostrarForm(false)} className="px-5 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">
-                      Cancelar
-                    </button>
+                    <button type="button" onClick={() => setMostrarForm(false)} className="px-5 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">Cancelar</button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Lista de transações */}
             {loadingTransacoes ? (
               <p className="text-center text-gray-400 py-8">Carregando...</p>
             ) : transacoesFiltradas.length === 0 ? (
               <div className="bg-white rounded-xl border p-10 text-center">
                 <p className="text-gray-400">
-                  {filtroTipo === 'todos'
-                    ? `Nenhuma transação em ${MESES_FULL[mes]} ${ano}`
-                    : `Nenhuma ${filtroTipo === 'receita' ? 'receita' : 'despesa'} em ${MESES_FULL[mes]} ${ano}`}
+                  {filtroTipo === 'todos' ? `Nenhuma transação em ${MESES_FULL[mes]} ${ano}` : `Nenhuma ${filtroTipo === 'receita' ? 'receita' : 'despesa'} em ${MESES_FULL[mes]} ${ano}`}
                 </p>
                 {filtroTipo === 'todos' && (
-                  <button onClick={() => setMostrarForm(true)} className="mt-3 text-blue-600 text-sm hover:underline">
-                    + Adicionar primeira transação
-                  </button>
+                  <button onClick={() => setMostrarForm(true)} className="mt-3 text-blue-600 text-sm hover:underline">+ Adicionar primeira transação</button>
                 )}
               </div>
             ) : (
@@ -539,7 +655,6 @@ export default function PessoalPage() {
               </div>
             )}
 
-            {/* Gastos por categoria */}
             {stats?.porCategoria && Object.keys(stats.porCategoria).length > 0 && filtroTipo !== 'receita' && (
               <div className="bg-white rounded-xl border p-5">
                 <h3 className="font-semibold text-gray-700 mb-3">Gastos por Categoria</h3>
@@ -581,7 +696,6 @@ export default function PessoalPage() {
               <p className="text-center text-gray-400 py-8">Carregando...</p>
             ) : (
               <>
-                {/* Tabela anual */}
                 <div className="bg-white rounded-xl border overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
@@ -610,12 +724,7 @@ export default function PessoalPage() {
                           <td className="px-4 py-3 text-right text-gray-400 text-xs">{m.count > 0 ? m.count : '—'}</td>
                           <td className="px-4 py-3 text-right">
                             {m.count > 0 && (
-                              <button
-                                onClick={() => { setMes(m.mes); setAba('extrato'); setFiltroTipo('todos') }}
-                                className="text-xs text-blue-600 hover:underline"
-                              >
-                                Ver →
-                              </button>
+                              <button onClick={() => { setMes(m.mes); setAba('extrato'); setFiltroTipo('todos') }} className="text-xs text-blue-600 hover:underline">Ver →</button>
                             )}
                           </td>
                         </tr>
@@ -634,22 +743,17 @@ export default function PessoalPage() {
                   </table>
                 </div>
 
-                {/* Cards resumo do ano */}
                 {transacoesAnual.length > 0 && (
                   <div className="grid grid-cols-3 gap-4">
                     <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                       <p className="text-xs text-green-600 font-medium">Total Recebido {ano}</p>
                       <p className="text-xl font-bold text-green-700 mt-1">{formatarMoeda(totalAnual.receitas)}</p>
-                      <p className="text-xs text-green-500 mt-1">
-                        {formatarMoeda(totalAnual.receitas / 12)}/mês médio
-                      </p>
+                      <p className="text-xs text-green-500 mt-1">{formatarMoeda(totalAnual.receitas / 12)}/mês médio</p>
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
                       <p className="text-xs text-red-600 font-medium">Total Gasto {ano}</p>
                       <p className="text-xl font-bold text-red-700 mt-1">{formatarMoeda(totalAnual.despesas)}</p>
-                      <p className="text-xs text-red-500 mt-1">
-                        {formatarMoeda(totalAnual.despesas / 12)}/mês médio
-                      </p>
+                      <p className="text-xs text-red-500 mt-1">{formatarMoeda(totalAnual.despesas / 12)}/mês médio</p>
                     </div>
                     <div className={`border rounded-xl p-4 text-center ${totalAnual.saldo >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
                       <p className={`text-xs font-medium ${totalAnual.saldo >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Saldo {ano}</p>
@@ -672,10 +776,7 @@ export default function PessoalPage() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-semibold text-gray-700">Cartões — {MESES_FULL[mes]} {ano}</h2>
-              <button
-                onClick={() => { setFTipo('despesa'); setMostrarForm(true); setAba('extrato') }}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
-              >
+              <button onClick={() => { setFTipo('despesa'); setMostrarForm(true); setAba('extrato') }} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
                 + Lançar no cartão
               </button>
             </div>
@@ -697,9 +798,7 @@ export default function PessoalPage() {
                     {stats.receitas > 0 && (
                       <div className="text-right">
                         <p className="text-xs text-purple-500">{((Math.abs(stats.cartao) / stats.receitas) * 100).toFixed(1)}% da renda</p>
-                        {Math.abs(stats.cartao) / stats.receitas > 0.3 && (
-                          <p className="text-xs text-red-500 font-medium mt-1">⚠ Alto uso do cartão</p>
-                        )}
+                        {Math.abs(stats.cartao) / stats.receitas > 0.3 && <p className="text-xs text-red-500 font-medium mt-1">⚠ Alto uso do cartão</p>}
                       </div>
                     )}
                   </div>
@@ -710,13 +809,10 @@ export default function PessoalPage() {
                   const total = gastoCartao.reduce((s, t) => s + Math.abs(Number(t.valor)), 0)
                   const porCat: Record<string, number> = {}
                   gastoCartao.forEach(t => { porCat[t.planoConta] = (porCat[t.planoConta] || 0) + Math.abs(Number(t.valor)) })
-
                   return (
                     <div key={cartaoNome} className="bg-white rounded-xl border p-5">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                          <span className="text-xl">💳</span> {cartaoNome}
-                        </h3>
+                        <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">💳</span> {cartaoNome}</h3>
                         <span className="text-xl font-bold text-purple-700">{formatarMoeda(total)}</span>
                       </div>
                       <div className="space-y-1 mb-4">
@@ -756,9 +852,7 @@ export default function PessoalPage() {
                 <p className="text-gray-500 mb-6 max-w-md mx-auto">
                   A IA vai analisar todas as suas transações e dar conselhos práticos sobre onde cortar gastos, como poupar mais e organizar sua vida financeira.
                 </p>
-                <button onClick={gerarAnalise} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700">
-                  Gerar Análise Agora
-                </button>
+                <button onClick={gerarAnalise} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700">Gerar Análise Agora</button>
               </div>
             )}
 
@@ -772,33 +866,24 @@ export default function PessoalPage() {
             {analise && (
               <div className="space-y-4">
                 <div className="flex justify-end">
-                  <button onClick={gerarAnalise} disabled={loadingAnalise} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                    ↺ Atualizar análise
-                  </button>
+                  <button onClick={gerarAnalise} disabled={loadingAnalise} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">↺ Atualizar análise</button>
                 </div>
-
                 {analise.analise?.diagnostico && (
                   <div className="bg-white rounded-xl border p-6">
-                    <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <span className="text-blue-600">◉</span> Diagnóstico
-                    </h2>
+                    <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="text-blue-600">◉</span> Diagnóstico</h2>
                     <p className="text-gray-700 leading-relaxed">{analise.analise.diagnostico}</p>
                   </div>
                 )}
-
                 {analise.analise?.pontosCriticos?.length > 0 && (
                   <div className="bg-red-50 rounded-xl border border-red-100 p-6">
                     <h2 className="font-bold text-red-800 mb-3">⚠ Pontos de atenção</h2>
                     <ul className="space-y-2">
                       {analise.analise.pontosCriticos.map((p: string, i: number) => (
-                        <li key={i} className="flex gap-2 text-red-700 text-sm">
-                          <span className="font-bold">{i + 1}.</span> {p}
-                        </li>
+                        <li key={i} className="flex gap-2 text-red-700 text-sm"><span className="font-bold">{i + 1}.</span> {p}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {analise.analise?.dicas?.length > 0 && (
                     <div className="bg-white rounded-xl border p-5">
@@ -814,34 +899,27 @@ export default function PessoalPage() {
                       </div>
                     </div>
                   )}
-
                   {analise.analise?.metaPoupanca && (
                     <div className="bg-blue-50 rounded-xl border border-blue-100 p-5">
                       <h2 className="font-bold text-blue-800 mb-2">🎯 Meta de Poupança</h2>
                       <p className="text-3xl font-bold text-blue-700">{analise.analise.metaPoupanca.percentual}%</p>
                       {analise.analise.metaPoupanca.valorMensal > 0 && (
-                        <p className="text-blue-600 font-medium text-sm mt-1">
-                          {formatarMoeda(analise.analise.metaPoupanca.valorMensal)}/mês
-                        </p>
+                        <p className="text-blue-600 font-medium text-sm mt-1">{formatarMoeda(analise.analise.metaPoupanca.valorMensal)}/mês</p>
                       )}
                       <p className="text-blue-600 text-xs mt-2">{analise.analise.metaPoupanca.justificativa}</p>
                     </div>
                   )}
                 </div>
-
                 {analise.analise?.alertasCartao?.length > 0 && analise.analise.alertasCartao[0] && (
                   <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
                     <h2 className="font-bold text-amber-800 mb-2">💳 Alertas de Cartão</h2>
                     <ul className="space-y-1">
                       {analise.analise.alertasCartao.map((a: string, i: number) => (
-                        <li key={i} className="text-amber-700 text-sm flex gap-2">
-                          <span>!</span> {a}
-                        </li>
+                        <li key={i} className="text-amber-700 text-sm flex gap-2"><span>!</span> {a}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-
                 {analise.analise?.mensagem && (
                   <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-5 text-white text-center">
                     <p className="italic">"{analise.analise.mensagem}"</p>
