@@ -109,6 +109,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </button>
+            <button onClick={() => router.push('/pessoal')} className="px-3 py-2 text-sm bg-pink-50 text-pink-700 rounded-lg hover:bg-pink-100 font-medium">💳 Pessoal</button>
             <button onClick={() => router.push('/perguntar')} className="px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">Perguntar</button>
             <button onClick={() => router.push('/relatorio')} className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Relatório</button>
             <button onClick={() => router.push('/historico')} className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Histórico</button>
