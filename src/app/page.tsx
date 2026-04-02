@@ -16,7 +16,9 @@ export default function Home() {
     }
 
     const u = JSON.parse(usuario)
-    if (u.tipo === 'cliente') {
+    if (u.tipo === 'usuario') {
+      router.push('/pessoal/dashboard')
+    } else if (u.tipo === 'cliente') {
       router.push('/dashboard')
     } else {
       router.push('/bpo/dashboard')

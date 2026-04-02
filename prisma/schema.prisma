@@ -8,6 +8,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEGADO — modelos originais preservados (não mexer)
+// ─────────────────────────────────────────────────────────────────────────────
+
 model Bpo {
   id           String   @id @default(uuid())
   nome         String
@@ -50,7 +54,6 @@ model Cliente {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  // Configurações de alerta
   alertaWpp   Boolean  @default(false)
   telefoneWpp String?
   metaLucro   Decimal? @db.Decimal(12, 2)
@@ -68,11 +71,11 @@ model Importacao {
   id                String   @id @default(uuid())
   clienteId         String
   cliente           Cliente  @relation(fields: [clienteId], references: [id])
-  tipo              String   // 'receitas' | 'despesas' | 'dre'
+  tipo              String
   nomeArquivo       String
   mes               Int
   ano               Int
-  status            String   @default("processando") // 'processando' | 'concluido' | 'erro'
+  status            String   @default("processando")
   erro              String?
   totalLinhas       Int?
   linhasProcessadas Int?
@@ -89,26 +92,24 @@ model Lancamento {
   mes          Int
   ano          Int
 
-  // Dados originais do Excel
   favorecido      String?
   planoConta      String
-  grupoConta      String // derivado do prefixo (01_RPS, 02_IMP, etc.)
+  grupoConta      String
   area            String?
-  advogado        String? // só existe em receitas
+  advogado        String?
   descricao       String?
   dataCompetencia DateTime?
   valor           Decimal   @db.Decimal(12, 2)
   dataVencimento  DateTime?
-  statusPg        String? // 'OK PG' | 'PREV' | 'PG'
+  statusPg        String?
   dataPagamento   DateTime?
   formaPagamento  String?
   banco           String?
   conciliado      Boolean   @default(false)
   observacoes     String?
 
-  // Classificação derivada pelo classificador
-  tipo    String // 'receita' | 'imposto' | 'custo_direto' | 'pessoal' | 'marketing' | 'geral' | 'retirada' | 'financeiro' | 'distribuicao' | 'investimento' | 'emprestimo' | 'aplicacao' | 'aporte' | 'parcelamento'
-  subtipo String?
+  tipo     String
+  subtipo  String?
   previsto Boolean @default(false)
 }
 
@@ -121,7 +122,6 @@ model Fechamento {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  // Receitas
   receitaBruta          Decimal @db.Decimal(12, 2) @default(0)
   honHonorariosIniciais Decimal @db.Decimal(12, 2) @default(0)
   honHonorariosMensais  Decimal @db.Decimal(12, 2) @default(0)
@@ -132,32 +132,26 @@ model Fechamento {
   impostos              Decimal @db.Decimal(12, 2) @default(0)
   receitaLiquida        Decimal @db.Decimal(12, 2) @default(0)
 
-  // Custos diretos
   custosDiretos      Decimal @db.Decimal(12, 2) @default(0)
   margemContribuicao Decimal @db.Decimal(12, 2) @default(0)
   percMargem         Decimal @db.Decimal(6, 2)  @default(0)
 
-  // Despesas ADM
   despesasPessoal   Decimal @db.Decimal(12, 2) @default(0)
   despesasMarketing Decimal @db.Decimal(12, 2) @default(0)
   despesasGerais    Decimal @db.Decimal(12, 2) @default(0)
   totalDespesasAdm  Decimal @db.Decimal(12, 2) @default(0)
 
-  // Resultado operacional
   lucroOperacional Decimal @db.Decimal(12, 2) @default(0)
   percLucroOp      Decimal @db.Decimal(6, 2)  @default(0)
 
-  // Retirada e financeiro
   retiradaSocios      Decimal @db.Decimal(12, 2) @default(0)
-  resultadoFinanceiro Decimal @db.Decimal(12, 2) @default(0) // receita juros - despesa juros
+  resultadoFinanceiro Decimal @db.Decimal(12, 2) @default(0)
   receitaJuros        Decimal @db.Decimal(12, 2) @default(0)
   despesaJuros        Decimal @db.Decimal(12, 2) @default(0)
 
-  // Lucro líquido = lucroOp - retirada + resultadoFinanceiro
   lucroLiquido Decimal @db.Decimal(12, 2) @default(0)
   percLucroLiq Decimal @db.Decimal(6, 2)  @default(0)
 
-  // Abaixo da linha (compõem resultado de caixa)
   distribuicaoLucros   Decimal @db.Decimal(12, 2) @default(0)
   investimentos        Decimal @db.Decimal(12, 2) @default(0)
   emprestimosEntrada   Decimal @db.Decimal(12, 2) @default(0)
@@ -167,17 +161,14 @@ model Fechamento {
   aplicacaoFinanceira  Decimal @db.Decimal(12, 2) @default(0)
   aporteSocios         Decimal @db.Decimal(12, 2) @default(0)
 
-  // Caixa
   resultadoCaixa Decimal? @db.Decimal(12, 2)
   saldoAnterior  Decimal? @db.Decimal(12, 2)
   saldoFinal     Decimal? @db.Decimal(12, 2)
 
-  // Por setor (JSON)
   resultadosPorSetor Json?
 
-  // Previsão
-  receitaPrevista  Decimal? @db.Decimal(12, 2)
-  despesaPrevista  Decimal? @db.Decimal(12, 2)
+  receitaPrevista Decimal? @db.Decimal(12, 2)
+  despesaPrevista Decimal? @db.Decimal(12, 2)
 
   pdfUrl      String?
   pdfGeradoEm DateTime?
@@ -219,8 +210,8 @@ model ContaPagar {
   valor        Decimal   @db.Decimal(12, 2)
   vencimento   DateTime
   recorrente   Boolean   @default(false)
-  frequencia   String?   // 'mensal' | 'quinzenal' | 'semanal' | 'anual'
-  status       String    @default("pendente") // 'pendente' | 'pago' | 'atrasado'
+  frequencia   String?
+  status       String    @default("pendente")
   pagoEm       DateTime?
   categoria    String?
   observacoes  String?
@@ -229,20 +220,522 @@ model ContaPagar {
 }
 
 model LancamentoManual {
-  id          String    @id @default(uuid())
-  clienteId   String
-  cliente     Cliente   @relation(fields: [clienteId], references: [id])
-  tipo        String    // 'receita' | 'despesa'
-  descricao   String
-  favorecido  String?
-  planoConta  String
-  grupoConta  String
-  tipoContabil String   // classificado pelo classificador
-  valor       Decimal   @db.Decimal(12, 2)
-  data        DateTime
-  mes         Int
-  ano         Int
-  previsto    Boolean   @default(false)
+  id           String   @id @default(uuid())
+  clienteId    String
+  cliente      Cliente  @relation(fields: [clienteId], references: [id])
+  tipo         String
+  descricao    String
+  favorecido   String?
+  planoConta   String
+  grupoConta   String
+  tipoContabil String
+  valor        Decimal  @db.Decimal(12, 2)
+  data         DateTime
+  mes          Int
+  ano          Int
+  previsto     Boolean  @default(false)
+  observacoes  String?
+  criadoEm     DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V2 — novos modelos Radar Financeiro
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nome         String
+  email        String   @unique
+  senhaHash    String
+  plano        String   @default("basico") // 'basico' | 'pro' | 'premium'
+  ativo        Boolean  @default(true)
+  isAdmin      Boolean  @default(false)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  contaEmpresa ContaEmpresa?
+  contaPessoal ContaPessoal?
+}
+
+// ─── MODO EMPRESA ─────────────────────────────────────────────────────────────
+
+model ContaEmpresa {
+  id        String  @id @default(uuid())
+  usuarioId String  @unique
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  // Dados da empresa
+  nomeEmpresa String
+  cnpj        String?
+  setor       String?
+
+  // Alertas WhatsApp
+  telefoneAlerta String? // número para alertas de vencimento
+  alertaAtivo    Boolean @default(false)
+
+  // Asaas (cobrança de inadimplentes)
+  asaasAtivo   Boolean @default(false)
+  asaasApiKey  String? // chave da conta Asaas do usuário
+  asaasWebhook String? // URL do webhook configurado no Asaas
+
+  // Z-API (WhatsApp)
+  zapiInstanceId  String?
+  zapiToken       String?
+  zapiClientToken String?
+
+  // Configurações régua de cobrança
+  cobrancaDescontoMax  Decimal? @db.Decimal(5, 2) // % máximo de desconto para acordo
+  cobrancaParcelasMax  Int?     // parcelas máximas para acordo
+
+  // Metas
+  metaLucro   Decimal? @db.Decimal(12, 2)
+  metaReceita Decimal? @db.Decimal(12, 2)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  importacoes   ImportacaoEmpresa[]
+  lancamentos   LancamentoEmpresa[]
+  fechamentos   FechamentoEmpresa[]
+  contasPagar   ContaPagarEmpresa[]
+  alertas       AlertaEmpresa[]
+  conversasIA   ConversaIAEmpresa[]
+  clientesDevedor ClienteDevedor[]
+}
+
+model ImportacaoEmpresa {
+  id                String       @id @default(uuid())
+  contaEmpresaId    String
+  contaEmpresa      ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+  tipo              String       // 'receitas' | 'despesas' | 'dre'
+  nomeArquivo       String
+  mes               Int
+  ano               Int
+  status            String       @default("processando")
+  erro              String?
+  totalLinhas       Int?
+  linhasProcessadas Int?
+  criadoEm          DateTime     @default(now())
+
+  lancamentos LancamentoEmpresa[]
+}
+
+model LancamentoEmpresa {
+  id             String            @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa      @relation(fields: [contaEmpresaId], references: [id])
+  importacaoId   String?
+  importacao     ImportacaoEmpresa? @relation(fields: [importacaoId], references: [id])
+  origem         String            @default("importacao") // 'importacao' | 'manual'
+  mes            Int
+  ano            Int
+
+  favorecido      String?
+  planoConta      String
+  grupoConta      String
+  area            String?
+  advogado        String?
+  descricao       String?
+  dataCompetencia DateTime?
+  valor           Decimal   @db.Decimal(12, 2)
+  dataVencimento  DateTime?
+  statusPg        String?
+  dataPagamento   DateTime?
+  formaPagamento  String?
+  banco           String?
+  conciliado      Boolean   @default(false)
+  observacoes     String?
+
+  tipo     String
+  subtipo  String?
+  previsto Boolean @default(false)
+
+  criadoEm DateTime @default(now())
+}
+
+model FechamentoEmpresa {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+  mes            Int
+  ano            Int
+  criadoEm       DateTime     @default(now())
+  atualizadoEm   DateTime     @updatedAt
+
+  receitaBruta          Decimal @db.Decimal(12, 2) @default(0)
+  honHonorariosIniciais Decimal @db.Decimal(12, 2) @default(0)
+  honHonorariosMensais  Decimal @db.Decimal(12, 2) @default(0)
+  honConsultas          Decimal @db.Decimal(12, 2) @default(0)
+  honExito              Decimal @db.Decimal(12, 2) @default(0)
+  honMultaCancelamento  Decimal @db.Decimal(12, 2) @default(0)
+  repasseExito          Decimal @db.Decimal(12, 2) @default(0)
+  impostos              Decimal @db.Decimal(12, 2) @default(0)
+  receitaLiquida        Decimal @db.Decimal(12, 2) @default(0)
+
+  custosDiretos      Decimal @db.Decimal(12, 2) @default(0)
+  margemContribuicao Decimal @db.Decimal(12, 2) @default(0)
+  percMargem         Decimal @db.Decimal(6, 2)  @default(0)
+
+  despesasPessoal   Decimal @db.Decimal(12, 2) @default(0)
+  despesasMarketing Decimal @db.Decimal(12, 2) @default(0)
+  despesasGerais    Decimal @db.Decimal(12, 2) @default(0)
+  totalDespesasAdm  Decimal @db.Decimal(12, 2) @default(0)
+
+  lucroOperacional Decimal @db.Decimal(12, 2) @default(0)
+  percLucroOp      Decimal @db.Decimal(6, 2)  @default(0)
+
+  retiradaSocios      Decimal @db.Decimal(12, 2) @default(0)
+  resultadoFinanceiro Decimal @db.Decimal(12, 2) @default(0)
+  receitaJuros        Decimal @db.Decimal(12, 2) @default(0)
+  despesaJuros        Decimal @db.Decimal(12, 2) @default(0)
+
+  lucroLiquido Decimal @db.Decimal(12, 2) @default(0)
+  percLucroLiq Decimal @db.Decimal(6, 2)  @default(0)
+
+  distribuicaoLucros   Decimal @db.Decimal(12, 2) @default(0)
+  investimentos        Decimal @db.Decimal(12, 2) @default(0)
+  emprestimosEntrada   Decimal @db.Decimal(12, 2) @default(0)
+  emprestimosPagamento Decimal @db.Decimal(12, 2) @default(0)
+  parcelamentoImpostos Decimal @db.Decimal(12, 2) @default(0)
+  resgateAplicacao     Decimal @db.Decimal(12, 2) @default(0)
+  aplicacaoFinanceira  Decimal @db.Decimal(12, 2) @default(0)
+  aporteSocios         Decimal @db.Decimal(12, 2) @default(0)
+
+  resultadoCaixa Decimal? @db.Decimal(12, 2)
+  saldoAnterior  Decimal? @db.Decimal(12, 2)
+  saldoFinal     Decimal? @db.Decimal(12, 2)
+
+  resultadosPorSetor    Json?
+  resultadosPorAdvogado Json?
+
+  receitaPrevista  Decimal? @db.Decimal(12, 2)
+  despesaPrevista  Decimal? @db.Decimal(12, 2)
+
+  // Inadimplência
+  totalInadimplente Decimal? @db.Decimal(12, 2)
+  totalRecuperado   Decimal? @db.Decimal(12, 2)
+
+  pdfUrl      String?
+  pdfGeradoEm DateTime?
+
+  @@unique([contaEmpresaId, mes, ano])
+}
+
+model ContaPagarEmpresa {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+  descricao      String
+  fornecedor     String?
+  valor          Decimal      @db.Decimal(12, 2)
+  vencimento     DateTime
+  recorrente     Boolean      @default(false)
+  frequencia     String?      // 'mensal' | 'quinzenal' | 'semanal' | 'anual'
+  status         String       @default("pendente") // 'pendente' | 'pago' | 'atrasado'
+  pagoEm         DateTime?
+  categoria      String?
+  observacoes    String?
+  criadoEm       DateTime     @default(now())
+  atualizadoEm   DateTime     @updatedAt
+}
+
+model AlertaEmpresa {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+  tipo           String       // 'vencimento' | 'lucro_abaixo_meta' | 'cobranca' | 'resumo_semanal'
+  titulo         String
+  mensagem       String
+  canal          String       @default("whatsapp")
+  enviado        Boolean      @default(false)
+  enviadoEm      DateTime?
+  erro           String?
+  criadoEm       DateTime     @default(now())
+}
+
+model ConversaIAEmpresa {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+  pergunta       String
+  resposta       String
+  contextoMes    Int?
+  contextoAno    Int?
+  criadoEm       DateTime     @default(now())
+}
+
+// ─── COBRANÇA (Asaas + Z-API) ─────────────────────────────────────────────────
+
+model ClienteDevedor {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+
+  nome            String
+  cpfCnpj         String?
+  email           String?
+  telefone        String?      // WhatsApp para cobrança
+  asaasCustomerId String?      // ID do cliente no Asaas
+
+  // Perfil do devedor
+  perfilDevedor String @default("primeiro_atraso") // 'primeiro_atraso' | 'recorrente' | 'longo_prazo'
+  totalDevido   Decimal  @db.Decimal(12, 2) @default(0)
+  totalPago     Decimal  @db.Decimal(12, 2) @default(0)
+
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  cobrancas CobrancaDevedor[]
+  mensagens MensagemCobranca[]
+  acordos   AcordoCobranca[]
+}
+
+model CobrancaDevedor {
+  id              String         @id @default(uuid())
+  clienteDevedorId String
+  clienteDevedor  ClienteDevedor @relation(fields: [clienteDevedorId], references: [id])
+
+  descricao       String
+  valor           Decimal   @db.Decimal(12, 2)
+  vencimento      DateTime
+  status          String    @default("pendente") // 'pendente' | 'pago' | 'acordo' | 'cancelado'
+  asaasPaymentId  String?   @unique // ID do pagamento no Asaas
+  asaasLink       String?   // link de pagamento gerado pelo Asaas
+  agenteAtivo     Boolean   @default(false)
+  etapaAtual      String?   // etapa atual da régua de cobrança
+
+  pagoEm      DateTime?
+  valorPago   Decimal?  @db.Decimal(12, 2)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  mensagens MensagemCobranca[]
+  acordos   AcordoCobranca[]
+}
+
+model MensagemCobranca {
+  id               String          @id @default(uuid())
+  clienteDevedorId String
+  clienteDevedor   ClienteDevedor  @relation(fields: [clienteDevedorId], references: [id])
+  cobrancaId       String?
+  cobranca         CobrancaDevedor? @relation(fields: [cobrancaId], references: [id])
+
+  direcao  String // 'enviada' | 'recebida'
+  canal    String @default("whatsapp") // 'whatsapp' | 'email'
+  conteudo String
+  enviado  Boolean   @default(false)
+  erro     String?
+  criadoEm DateTime  @default(now())
+}
+
+model AcordoCobranca {
+  id               String          @id @default(uuid())
+  clienteDevedorId String
+  clienteDevedor   ClienteDevedor  @relation(fields: [clienteDevedorId], references: [id])
+  cobrancaId       String
+  cobranca         CobrancaDevedor @relation(fields: [cobrancaId], references: [id])
+
+  tipo           String  // 'desconto' | 'parcelamento' | 'desconto_parcelamento'
+  valorOriginal  Decimal @db.Decimal(12, 2)
+  valorAcordado  Decimal @db.Decimal(12, 2)
+  parcelas       Int     @default(1)
+  status         String  @default("proposto") // 'proposto' | 'aceito' | 'recusado' | 'cumprido'
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
+// ─── MODO PESSOAL ─────────────────────────────────────────────────────────────
+
+model ContaPessoal {
+  id        String  @id @default(uuid())
+  usuarioId String  @unique
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  metaEconomiasMensal Decimal? @db.Decimal(12, 2)
+  diaFechamento       Int      @default(1) // dia do mês que fecha o período
+  saldoConta          Decimal? @db.Decimal(14, 2) // saldo real da conta bancária (atualizado manualmente)
+  saldoContaEm        DateTime? // data/hora da última atualização do saldo
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  categorias    CategoriaPessoal[]
+  transacoes    TransacaoPessoal[]
+  importacoes   ImportacaoPessoal[]
+  investimentos InvestimentoPessoal[]
+  orcamentos   OrcamentoPessoal[]
+  metas        MetaPessoal[]
+  projetos     ProjetoPessoal[]
+  conversasIA  ConversaIAPessoal[]
+  alertas      AlertaPessoal[]
+}
+
+model ImportacaoPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+  tipo           String       // 'pdf' | 'excel'
+  nomeArquivo    String
+  banco          String?
+  periodo        String?
+  criadoEm      DateTime     @default(now())
+
+  transacoes TransacaoPessoal[]
+}
+
+model CategoriaPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  nome   String
+  tipo   String  // 'receita' | 'despesa'
+  cor    String? // hex, para gráficos
+  icone  String?
+  padrao Boolean @default(false) // categoria padrão do sistema
+
+  criadoEm DateTime @default(now())
+
+  transacoes TransacaoPessoal[]
+  orcamentos OrcamentoPessoal[]
+
+  @@unique([contaPessoalId, nome])
+}
+
+model TransacaoPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+  categoriaId    String?
+  categoria      CategoriaPessoal? @relation(fields: [categoriaId], references: [id])
+  projetoId      String?
+  projeto        ProjetoPessoal?   @relation(fields: [projetoId], references: [id])
+  importacaoId   String?
+  importacao     ImportacaoPessoal? @relation(fields: [importacaoId], references: [id])
+
+  tipo      String  // 'receita' | 'despesa'
+  descricao String
+  valor     Decimal @db.Decimal(12, 2)
+  data      DateTime
+  mes       Int
+  ano       Int
+
+  cartao      String?  // nome do cartão (para fatura)
+  recorrente  Boolean  @default(false)
+  parcelado   Boolean  @default(false)
+  totalParcelas Int?
+  parcelaAtual  Int?
+  origem      String   @default("manual") // 'manual' | 'importacao_excel' | 'importacao_pdf'
+
   observacoes String?
-  criadoEm    DateTime  @default(now())
+  criadoEm    DateTime @default(now())
+}
+
+model OrcamentoPessoal {
+  id             String           @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal     @relation(fields: [contaPessoalId], references: [id])
+  categoriaId    String
+  categoria      CategoriaPessoal @relation(fields: [categoriaId], references: [id])
+
+  mes        Int
+  ano        Int
+  valorMeta  Decimal @db.Decimal(12, 2)
+  valorGasto Decimal @db.Decimal(12, 2) @default(0) // atualizado automaticamente
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([contaPessoalId, categoriaId, mes, ano])
+}
+
+model MetaPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  titulo       String
+  descricao    String?
+  valorMeta    Decimal  @db.Decimal(12, 2)
+  valorAtual   Decimal  @db.Decimal(12, 2) @default(0)
+  prazo        DateTime?
+  status       String   @default("ativa") // 'ativa' | 'concluida' | 'pausada'
+
+  estrategiaIA    String?  // JSON com a estratégia gerada pela IA (salva uma vez)
+  estrategiaGerada Boolean @default(false)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
+model InvestimentoPessoal {
+  id                    String       @id @default(uuid())
+  contaPessoalId        String
+  contaPessoal          ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  produto               String       // ex: SICREDINVEST CDI100
+  titulo                String?      // código do título
+  indexador             String?      // CDI, IPCA, etc.
+  remuneracao           String?      // 100% CDI
+  valorInicial          Decimal      @db.Decimal(12, 2)
+  dataAplicacao         DateTime
+  vencimento            DateTime?
+  carencia              DateTime?
+  tributacao            String?
+
+  saldoAtual            Decimal      @db.Decimal(12, 2)
+  rendimentosProvisionados Decimal   @db.Decimal(12, 2) @default(0)
+  liquidoSaque          Decimal      @db.Decimal(12, 2)
+
+  atualizadoEm          DateTime     @default(now())
+  criadoEm              DateTime     @default(now())
+
+  @@unique([contaPessoalId, titulo])
+}
+
+model ProjetoPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  nome      String
+  descricao String?
+  orcamento Decimal?  @db.Decimal(12, 2)
+  status    String    @default("ativo") // 'ativo' | 'concluido' | 'pausado'
+  cor       String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  transacoes TransacaoPessoal[]
+}
+
+model ConversaIAPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  pergunta    String
+  resposta    String
+  contextoMes Int?
+  contextoAno Int?
+  criadoEm    DateTime @default(now())
+}
+
+model AlertaPessoal {
+  id             String       @id @default(uuid())
+  contaPessoalId String
+  contaPessoal   ContaPessoal @relation(fields: [contaPessoalId], references: [id])
+
+  tipo      String    // 'orcamento_estourado' | 'meta_progresso' | 'resumo_mensal'
+  titulo    String
+  mensagem  String
+  canal     String    @default("whatsapp")
+  enviado   Boolean   @default(false)
+  enviadoEm DateTime?
+  erro      String?
+  criadoEm  DateTime  @default(now())
 }

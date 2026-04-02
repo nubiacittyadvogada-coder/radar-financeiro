@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import Link from 'next/link'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [modo, setModo] = useState<'usuario' | 'legado'>('usuario')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
-  const [tipo, setTipo] = useState<'cliente' | 'bpo'>('cliente')
+  const [tipoLegado, setTipoLegado] = useState<'cliente' | 'bpo'>('cliente')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -18,11 +19,46 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const data = await api.login(email, senha, tipo)
-      if (data.usuario.tipo === 'cliente') {
-        router.push('/dashboard')
+      if (modo === 'usuario') {
+        const res = await fetch('/api/v2/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, senha }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.erro || 'Erro ao entrar')
+
+        localStorage.setItem('radar_token', data.token)
+        localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
+
+        // Redireciona conforme modos ativos
+        if (data.usuario.isAdmin) {
+          router.push('/admin')
+        } else if (data.usuario.temEmpresa) {
+          router.push('/empresa/dashboard')
+        } else if (data.usuario.temPessoal) {
+          router.push('/pessoal/dashboard')
+        } else {
+          router.push('/onboarding')
+        }
       } else {
-        router.push('/bpo/dashboard')
+        // Login legado (BPO/cliente)
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, senha, tipo: tipoLegado }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.erro || 'Erro ao entrar')
+
+        localStorage.setItem('radar_token', data.token)
+        localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
+
+        if (data.usuario.tipo === 'cliente') {
+          router.push('/dashboard')
+        } else {
+          router.push('/bpo/dashboard')
+        }
       }
     } catch (err: any) {
       setErro(err.message || 'Email ou senha inválidos')
@@ -40,35 +76,9 @@ export default function LoginPage() {
             <p className="text-gray-500 mt-2">Seus números, sua decisão</p>
           </div>
 
-          {/* Tabs BPO / Empresário */}
-          <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setTipo('cliente')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition ${
-                tipo === 'cliente'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Empresário
-            </button>
-            <button
-              onClick={() => setTipo('bpo')}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition ${
-                tipo === 'bpo'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              BPO Financeiro
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
                 value={email}
@@ -80,9 +90,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Senha
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
               <input
                 type="password"
                 value={senha}
@@ -94,9 +102,7 @@ export default function LoginPage() {
             </div>
 
             {erro && (
-              <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-lg text-sm">
-                {erro}
-              </div>
+              <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-lg text-sm">{erro}</div>
             )}
 
             <button
@@ -107,6 +113,14 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
+
+          <div className="mt-6 text-center text-sm text-gray-500">
+            Não tem conta?{' '}
+            <Link href="/cadastro" className="text-blue-600 hover:underline font-medium">
+              Cadastre-se grátis
+            </Link>
+          </div>
+
         </div>
       </div>
     </div>

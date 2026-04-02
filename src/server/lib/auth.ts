@@ -7,13 +7,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
 
 // Tipos de usuário no token
-export type TipoUsuario = 'bpo' | 'usuario_bpo' | 'cliente'
+export type TipoUsuario = 'bpo' | 'usuario_bpo' | 'cliente' | 'usuario'
 
 export interface TokenPayload {
   id: string
   tipo: TipoUsuario
   bpoId?: string
   email: string
+  nome?: string
+  temEmpresa?: boolean
+  temPessoal?: boolean
+  isAdmin?: boolean
 }
 
 export interface AuthRequest extends Request {
@@ -140,4 +144,49 @@ export async function login(
   }
 
   return null
+}
+
+/**
+ * Login para Usuario (v2).
+ */
+export async function loginUsuario(
+  email: string,
+  senha: string
+): Promise<{ token: string; usuario: TokenPayload } | null> {
+  const usuario = await prisma.usuario.findUnique({
+    where: { email },
+    include: { contaEmpresa: true, contaPessoal: true },
+  })
+
+  if (!usuario || !usuario.ativo) return null
+  const senhaOk = await verificarSenha(senha, usuario.senhaHash)
+  if (!senhaOk) return null
+
+  const payload: TokenPayload = {
+    id: usuario.id,
+    tipo: 'usuario',
+    email: usuario.email,
+    nome: usuario.nome,
+    temEmpresa: !!usuario.contaEmpresa,
+    temPessoal: !!usuario.contaPessoal,
+    isAdmin: usuario.isAdmin,
+  }
+  return { token: gerarToken(payload), usuario: payload }
+}
+
+/**
+ * Cria um novo Usuario com hash de senha.
+ */
+export async function cadastrarUsuario(
+  nome: string,
+  email: string,
+  senha: string
+): Promise<TokenPayload> {
+  const existe = await prisma.usuario.findUnique({ where: { email } })
+  if (existe) throw new Error('Email já cadastrado')
+
+  const senhaHash = await hashSenha(senha)
+  const usuario = await prisma.usuario.create({ data: { nome, email, senhaHash } })
+
+  return { id: usuario.id, tipo: 'usuario', email: usuario.email, nome: usuario.nome, temEmpresa: false, temPessoal: false }
 }
