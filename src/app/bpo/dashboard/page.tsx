@@ -39,6 +39,12 @@ export default function BpoDashboardPage() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => router.push('/pessoal')}
+            className="px-4 py-2 bg-pink-50 text-pink-700 rounded-lg text-sm font-medium hover:bg-pink-100"
+          >
+            💳 Minhas Finanças
+          </button>
+          <button
             onClick={() => router.push('/bpo/clientes/novo')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
           >
