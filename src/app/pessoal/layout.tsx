@@ -11,6 +11,8 @@ const NAV = [
   { href: '/pessoal/importacoes', label: 'Importações', icon: '🗂️' },
   { href: '/pessoal/investimentos', label: 'Investimentos', icon: '📈' },
   { href: '/pessoal/orcamento', label: 'Orçamento', icon: '📊' },
+  { href: '/pessoal/casamento', label: 'Casamento', icon: '💒' },
+  { href: '/pessoal/parcelas', label: 'Parcelas CC', icon: '📦' },
   { href: '/pessoal/metas', label: 'Metas', icon: '🎯' },
   { href: '/pessoal/projetos', label: 'Projetos', icon: '📁' },
   { href: '/pessoal/relatorio', label: 'Exportar', icon: '📥' },
