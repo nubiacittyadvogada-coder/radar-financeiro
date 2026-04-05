@@ -19,7 +19,10 @@ export default function Home() {
   }, [])
 
   function getDashboardLink(u: any) {
-    if (u?.tipo === 'usuario') return '/pessoal/dashboard'
+    if (u?.tipo === 'usuario') {
+      if (u.temEmpresa) return '/empresa/dashboard'
+      return '/pessoal/dashboard'
+    }
     if (u?.tipo === 'cliente') return '/dashboard'
     return '/bpo/dashboard'
   }
