@@ -82,12 +82,18 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Link
               href="/admin/usuarios"
               className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
             >
               Ver todos os usuários →
+            </Link>
+            <Link
+              href="/admin/assinaturas"
+              className="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+            >
+              Assinaturas e MRR →
             </Link>
           </div>
         </>

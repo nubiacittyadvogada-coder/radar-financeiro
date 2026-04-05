@@ -19,6 +19,7 @@ const NAV = [
   { href: '/pessoal/relatorio', label: 'Exportar', icon: '📥' },
   { href: '/pessoal/perguntar', label: 'Conselheira IA', icon: '🤖' },
   { href: '/pessoal/configuracoes', label: 'Configurações', icon: '⚙️' },
+  { href: '/pessoal/assinatura', label: 'Meu Plano', icon: '⭐' },
 ]
 
 // Bottom tabs for mobile (5 most used)

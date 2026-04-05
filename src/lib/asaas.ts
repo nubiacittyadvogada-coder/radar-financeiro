@@ -95,6 +95,36 @@ export class AsaasClient {
     const cobranca = await this.buscarCobranca(paymentId)
     return cobranca?.invoiceUrl || null
   }
+
+  // ── Assinaturas recorrentes ────────────────────────────────────────────────
+
+  async criarAssinatura(dados: {
+    customer: string
+    billingType: 'BOLETO' | 'PIX' | 'CREDIT_CARD'
+    value: number
+    nextDueDate: string   // YYYY-MM-DD — data do primeiro vencimento
+    cycle: 'MONTHLY'
+    description?: string
+    externalReference?: string
+  }) {
+    return this.req('/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async buscarAssinatura(id: string) {
+    return this.req(`/subscriptions/${id}`)
+  }
+
+  async cancelarAssinatura(id: string) {
+    return this.req(`/subscriptions/${id}`, { method: 'DELETE' })
+  }
+
+  async listarPagamentosAssinatura(subscriptionId: string) {
+    const data = await this.req(`/subscriptions/${subscriptionId}/payments`)
+    return data.data || []
+  }
 }
 
 /**

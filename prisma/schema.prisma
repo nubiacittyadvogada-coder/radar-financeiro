@@ -253,6 +253,10 @@ model Usuario {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  asaasCustomerId  String?   // ID do cliente no Asaas da plataforma
+  planoValidoAte   DateTime? // data de validade da assinatura paga
+  assinatura       AssinaturaRadar?
+
   contaEmpresa ContaEmpresa?
   contaPessoal ContaPessoal?
 }
@@ -764,4 +768,36 @@ model AlertaPessoal {
   enviadoEm DateTime?
   erro      String?
   criadoEm  DateTime  @default(now())
+}
+
+// ─── ASSINATURAS / MONETIZAÇÃO ────────────────────────────────────────────────
+
+model AssinaturaRadar {
+  id              String   @id @default(uuid())
+  usuarioId       String   @unique
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id])
+  plano           String   // 'pro' | 'premium'
+  status          String   @default("pendente") // pendente | ativa | cancelada | inadimplente
+  asaasSubId      String?  @unique // ID da assinatura no Asaas
+  valorMensal     Decimal  @db.Decimal(10, 2)
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+  venceEm         DateTime?
+  linkPagamento   String?
+  pagamentos      PagamentoAssinatura[]
+  @@map("assinatura_radar")
+}
+
+model PagamentoAssinatura {
+  id             String          @id @default(uuid())
+  assinaturaId   String
+  assinatura     AssinaturaRadar @relation(fields: [assinaturaId], references: [id])
+  asaasPaymentId String?         @unique
+  valor          Decimal         @db.Decimal(10, 2)
+  status         String          @default("PENDING")
+  vencimento     DateTime
+  pagoEm         DateTime?
+  linkPagamento  String?
+  criadoEm       DateTime        @default(now())
+  @@map("pagamento_assinatura")
 }
