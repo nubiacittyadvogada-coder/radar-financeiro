@@ -32,6 +32,7 @@ export default function EmpresaLayout({ children }: { children: React.ReactNode 
   function sair() {
     localStorage.removeItem('radar_token')
     localStorage.removeItem('radar_usuario')
+    document.cookie = 'radar_sessao=; path=/; max-age=0'
     router.push('/login')
   }
 
@@ -104,22 +105,50 @@ export default function EmpresaLayout({ children }: { children: React.ReactNode 
       {/* Mobile menu overlay */}
       {sidebarOpen && (
         <div className="md:hidden fixed inset-0 z-20 bg-black/40" onClick={() => setSidebarOpen(false)}>
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="font-bold text-gray-900 mb-4">🏢 Modo Empresa</div>
-            <nav className="space-y-1">
+          <aside className="absolute right-0 top-0 bottom-0 w-72 bg-white flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b bg-blue-600 text-white">
+              <div className="font-bold">🏢 Modo Empresa</div>
+              <div className="text-sm text-blue-100 mt-0.5 truncate">{usuario.nome}</div>
+            </div>
+            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
               {NAV.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                    pathname === item.href ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${
+                    pathname === item.href ? 'bg-blue-50 text-blue-700' : 'text-gray-600 active:bg-gray-100'
                   }`}
                 >
-                  {item.icon} {item.label}
+                  <span className="text-lg">{item.icon}</span>
+                  {item.label}
                 </Link>
               ))}
             </nav>
+            <div className="p-3 border-t space-y-1">
+              {usuario.temPessoal && (
+                <Link
+                  href="/pessoal/dashboard"
+                  onClick={() => setSidebarOpen(false)}
+                  className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm text-gray-700 font-semibold bg-green-50 active:bg-green-100"
+                >
+                  <span className="text-lg">👤</span> Modo Pessoal
+                </Link>
+              )}
+              <Link
+                href="/conta"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm text-gray-600"
+              >
+                <span className="text-lg">🔑</span> Alterar senha
+              </Link>
+              <button
+                onClick={sair}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm text-red-600 text-left"
+              >
+                <span className="text-lg">🚪</span> Sair
+              </button>
+            </div>
           </aside>
         </div>
       )}

@@ -46,6 +46,7 @@ export default function PessoalLayout({ children }: { children: React.ReactNode 
   function sair() {
     localStorage.removeItem('radar_token')
     localStorage.removeItem('radar_usuario')
+    document.cookie = 'radar_sessao=; path=/; max-age=0'
     router.push('/login')
   }
 

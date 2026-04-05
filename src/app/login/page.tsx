@@ -30,6 +30,8 @@ export default function LoginPage() {
 
         localStorage.setItem('radar_token', data.token)
         localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
+        // Cookie de sessão para proteção server-side via middleware
+        document.cookie = `radar_sessao=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`
 
         // Redireciona conforme modos ativos
         if (data.usuario.isAdmin) {
@@ -53,6 +55,7 @@ export default function LoginPage() {
 
         localStorage.setItem('radar_token', data.token)
         localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
+        document.cookie = `radar_sessao=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`
 
         if (data.usuario.tipo === 'cliente') {
           router.push('/dashboard')
@@ -119,6 +122,12 @@ export default function LoginPage() {
             <Link href="/cadastro" className="text-blue-600 hover:underline font-medium">
               Cadastre-se grátis
             </Link>
+          </div>
+
+          <div className="mt-4 text-center text-xs text-gray-400 flex justify-center gap-3">
+            <Link href="/termos" className="hover:text-gray-600 hover:underline">Termos de Uso</Link>
+            <span>·</span>
+            <Link href="/privacidade" className="hover:text-gray-600 hover:underline">Privacidade & LGPD</Link>
           </div>
 
         </div>
