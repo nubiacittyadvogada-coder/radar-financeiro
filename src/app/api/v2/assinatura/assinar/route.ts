@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const nextDueDate = vencimento.toISOString().slice(0, 10)
 
     const subAsaas = await asaas.criarAssinatura({
-      customer: asaasCustomerId,
+      customer: asaasCustomerId!,
       billingType: billingType as 'PIX' | 'BOLETO' | 'CREDIT_CARD',
       value: planoInfo.preco,
       nextDueDate,
