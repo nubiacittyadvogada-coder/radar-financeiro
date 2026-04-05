@@ -1,9 +1,19 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/server/lib/db'
 
+const WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN || ''
+
 // Asaas envia webhook com eventos de pagamento
 export async function POST(req: NextRequest) {
   try {
+    // Valida token de autenticação do Asaas
+    if (WEBHOOK_TOKEN) {
+      const asaasToken = req.headers.get('asaas-access-token') || req.headers.get('access_token') || ''
+      if (asaasToken !== WEBHOOK_TOKEN) {
+        return Response.json({ erro: 'Não autorizado' }, { status: 401 })
+      }
+    }
+
     const body = await req.json()
     const { event, payment } = body
 
