@@ -10,7 +10,6 @@ const planos = [
     nome: 'Básico',
     preco: 'Grátis',
     precoSub: 'para sempre',
-    cor: 'gray',
     destaque: false,
     recursos: [
       '1 modo ativo (Pessoal ou Empresa)',
@@ -25,14 +24,12 @@ const planos = [
       'Modo multi-entidade',
     ],
     cta: null,
-    ctaHref: '/cadastro',
   },
   {
     key: 'pro',
     nome: 'Pro',
     preco: 'R$ 29,90',
     precoSub: 'por mês',
-    cor: 'blue',
     destaque: true,
     recursos: [
       'Modos Pessoal + Empresa simultâneos',
@@ -46,14 +43,12 @@ const planos = [
     ],
     nao: [],
     cta: 'Assinar Pro',
-    ctaHref: '/login?plano=pro',
   },
   {
     key: 'premium',
     nome: 'Premium',
     preco: 'R$ 49,90',
     precoSub: 'por mês',
-    cor: 'green',
     destaque: false,
     recursos: [
       'Tudo do plano Pro',
@@ -65,7 +60,6 @@ const planos = [
     ],
     nao: [],
     cta: 'Assinar Premium',
-    ctaHref: '/login?plano=premium',
   },
 ]
 
@@ -92,103 +86,118 @@ const faq = [
   },
 ]
 
-function CupomInput({ planoKey }: { planoKey: string }) {
-  const router = useRouter()
-  const [aberto, setAberto] = useState(false)
-  const [codigo, setCodigo] = useState('')
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle')
-  const [mensagem, setMensagem] = useState('')
-  const [usuarioLogado, setUsuarioLogado] = useState<any>(null)
-
+function useAuth() {
+  const [auth, setAuth] = useState<{ token: string; usuario: any } | null>(null)
   useEffect(() => {
     try {
       const u = localStorage.getItem('radar_usuario')
       const t = localStorage.getItem('radar_token')
-      if (u && t) setUsuarioLogado({ usuario: JSON.parse(u), token: t })
+      if (u && t) setAuth({ usuario: JSON.parse(u), token: t })
     } catch {}
   }, [])
+  return auth
+}
+
+function AssinarBtn({ planoKey, destaque }: { planoKey: string; destaque: boolean }) {
+  const router = useRouter()
+  const auth = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  function getDashboard(u: any) {
+    if (u?.temEmpresa) return '/empresa/dashboard'
+    return '/pessoal/dashboard'
+  }
+
+  async function handleAssinar() {
+    if (!auth) {
+      // Não logado → cadastro com plano na URL, volta aqui depois
+      router.push(`/cadastro?redirect=/pessoal/assinatura&plano=${planoKey}`)
+      return
+    }
+    // Logado → vai direto para página de assinatura com o plano selecionado
+    router.push(`/pessoal/assinatura?plano=${planoKey}`)
+  }
+
+  return (
+    <button
+      onClick={handleAssinar}
+      disabled={loading}
+      className={`w-full py-3 rounded-xl font-semibold text-sm transition disabled:opacity-50 ${
+        destaque
+          ? 'bg-green-600 text-white hover:bg-green-700'
+          : 'bg-gray-900 text-white hover:bg-gray-800'
+      }`}
+    >
+      {loading ? 'Aguarde...' : destaque ? '⭐ Assinar Pro' : 'Assinar Premium'}
+    </button>
+  )
+}
+
+function CupomInput({ planoKey }: { planoKey: string }) {
+  const router = useRouter()
+  const auth = useAuth()
+  const [aberto, setAberto] = useState(false)
+  const [codigo, setCodigo] = useState('')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle')
+  const [mensagem, setMensagem] = useState('')
 
   async function handleAplicar() {
     const cod = codigo.toUpperCase().trim()
     if (!cod) return
-
-    if (!usuarioLogado) {
-      // Redireciona para cadastro com plano e cupom
+    if (!auth) {
       router.push(`/cadastro?plano=${planoKey}&cupom=${cod}`)
       return
     }
-
     setStatus('loading')
     setMensagem('')
     try {
       const res = await fetch(`/api/v2/assinatura/cupom?codigo=${cod}`, {
-        headers: { Authorization: `Bearer ${usuarioLogado.token}` },
+        headers: { Authorization: `Bearer ${auth.token}` },
       })
       const data = await res.json()
-      if (!res.ok) {
-        setStatus('erro')
-        setMensagem(data.erro || 'Cupom inválido')
-        return
-      }
+      if (!res.ok) { setStatus('erro'); setMensagem(data.erro || 'Cupom inválido'); return }
       setStatus('ok')
-      setMensagem(data.descricao || `${data.diasTrial} dias grátis no plano ${planoKey}!`)
-
-      // Se trial, aplica direto
+      setMensagem(data.descricao || `${data.diasTrial} dias grátis!`)
       if (data.tipo === 'trial') {
-        const assinarRes = await fetch('/api/v2/assinatura/assinar', {
+        const r2 = await fetch('/api/v2/assinatura/assinar', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${usuarioLogado.token}`,
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
           body: JSON.stringify({ plano: planoKey, cupomCodigo: cod }),
         })
-        const assinarData = await assinarRes.json()
-        if (assinarData.trial) {
-          setMensagem(`Trial ativado! Plano ${planoKey} grátis por ${data.diasTrial} dias.`)
-          setTimeout(() => router.push('/pessoal/dashboard'), 2000)
+        const d2 = await r2.json()
+        if (d2.trial) {
+          setMensagem(`✅ Trial ativado! ${data.diasTrial} dias grátis no plano ${planoKey === 'pro' ? 'Pro' : 'Premium'}.`)
+          setTimeout(() => router.push(auth.usuario.temEmpresa ? '/empresa/dashboard' : '/pessoal/dashboard'), 2000)
         }
       }
-    } catch {
-      setStatus('erro')
-      setMensagem('Erro ao validar cupom')
-    }
+    } catch { setStatus('erro'); setMensagem('Erro ao validar cupom') }
   }
 
   return (
     <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setAberto(!aberto)}
-        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition"
-      >
-        {aberto ? '▲ Fechar cupom' : '🏷️ Tem um cupom?'}
+      <button type="button" onClick={() => setAberto(!aberto)}
+        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition">
+        {aberto ? '▲ Fechar' : '🏷️ Tem um cupom?'}
       </button>
-
       {aberto && (
         <div className="mt-2 flex gap-2">
-          <input
-            type="text"
-            value={codigo}
+          <input type="text" value={codigo}
             onChange={(e) => { setCodigo(e.target.value.toUpperCase()); setStatus('idle'); setMensagem('') }}
             placeholder="Ex: TESTE30"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:border-green-400 transition"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:border-green-400"
             onKeyDown={(e) => e.key === 'Enter' && handleAplicar()}
           />
-          <button
-            type="button"
-            onClick={handleAplicar}
+          <button type="button" onClick={handleAplicar}
             disabled={status === 'loading' || !codigo.trim()}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition"
-          >
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg">
             {status === 'loading' ? '...' : 'Aplicar'}
           </button>
         </div>
       )}
-
       {mensagem && (
         <p className={`mt-1.5 text-xs font-medium ${status === 'ok' ? 'text-green-600' : 'text-red-500'}`}>
-          {status === 'ok' ? '✓ ' : '✕ '}{mensagem}
+          {mensagem}
         </p>
       )}
     </div>
@@ -269,21 +278,12 @@ export default function PlanosPage() {
 
               {plano.cta ? (
                 <>
-                  <Link
-                    href={plano.ctaHref}
-                    className={`w-full text-center py-3 rounded-xl font-semibold text-sm transition ${
-                      plano.destaque
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-gray-900 text-white hover:bg-gray-800'
-                    }`}
-                  >
-                    {plano.cta}
-                  </Link>
+                  <AssinarBtn planoKey={plano.key} destaque={plano.destaque} />
                   <CupomInput planoKey={plano.key} />
                 </>
               ) : (
                 <Link
-                  href={plano.ctaHref}
+                  href="/cadastro"
                   className="w-full text-center py-3 rounded-xl font-semibold text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 transition"
                 >
                   Começar grátis

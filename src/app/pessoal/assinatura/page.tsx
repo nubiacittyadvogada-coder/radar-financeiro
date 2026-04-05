@@ -67,6 +67,12 @@ export default function AssinaturaPage() {
   const [loading, setLoading] = useState(true)
   const [cancelando, setCancelando] = useState(false)
   const [erro, setErro] = useState('')
+  // Checkout inline
+  const [planoSelecionado, setPlanoSelecionado] = useState<string | null>(null)
+  const [billingType, setBillingType] = useState('PIX')
+  const [cpfCnpj, setCpfCnpj] = useState('')
+  const [assinalando, setAssinalando] = useState(false)
+  const [linkPagamento, setLinkPagamento] = useState<string | null>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -75,12 +81,43 @@ export default function AssinaturaPage() {
     const parsed = JSON.parse(u)
     if (parsed.tipo !== 'usuario') { router.push('/login'); return }
     setToken(t)
+    // Detecta ?plano= na URL
+    const params = new URLSearchParams(window.location.search)
+    const planoParam = params.get('plano')
+    if (planoParam && ['pro', 'premium'].includes(planoParam)) setPlanoSelecionado(planoParam)
     fetch('/api/v2/assinatura/status', { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.json())
       .then(setData)
       .catch(() => setErro('Erro ao carregar status da assinatura.'))
       .finally(() => setLoading(false))
   }, [router])
+
+  async function handleAssinar() {
+    if (!token || !planoSelecionado) return
+    setAssinalando(true)
+    setErro('')
+    try {
+      const res = await fetch('/api/v2/assinatura/assinar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ plano: planoSelecionado, billingType, cpfCnpj: cpfCnpj || undefined }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.erro || 'Erro ao processar assinatura')
+      if (json.linkPagamento) {
+        setLinkPagamento(json.linkPagamento)
+      } else {
+        // Recarrega status
+        const r2 = await fetch('/api/v2/assinatura/status', { headers: { Authorization: `Bearer ${token}` } })
+        setData(await r2.json())
+        setPlanoSelecionado(null)
+      }
+    } catch (e: any) {
+      setErro(e.message)
+    } finally {
+      setAssinalando(false)
+    }
+  }
 
   async function cancelar() {
     if (!confirm('Tem certeza que deseja cancelar sua assinatura? Seu acesso fica ativo até o final do período pago.')) return
@@ -119,6 +156,78 @@ export default function AssinaturaPage() {
 
       {erro && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{erro}</div>
+      )}
+
+      {/* ── CHECKOUT INLINE ── */}
+      {planoSelecionado && !linkPagamento && (
+        <div className="bg-white rounded-xl border-2 border-green-500 shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-bold text-gray-900 text-lg">
+                Assinar plano {planoSelecionado === 'pro' ? 'Pro' : 'Premium'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {planoSelecionado === 'pro' ? 'R$ 29,90/mês' : 'R$ 49,90/mês'}
+              </p>
+            </div>
+            <button onClick={() => setPlanoSelecionado(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Forma de pagamento</label>
+              <div className="flex gap-2">
+                {[
+                  { value: 'PIX', label: '⚡ PIX' },
+                  { value: 'BOLETO', label: '📄 Boleto' },
+                  { value: 'CREDIT_CARD', label: '💳 Cartão' },
+                ].map((opt) => (
+                  <button key={opt.value} type="button"
+                    onClick={() => setBillingType(opt.value)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
+                      billingType === opt.value ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">CPF ou CNPJ <span className="text-gray-400 font-normal">(opcional, para NF)</span></label>
+              <input
+                type="text"
+                value={cpfCnpj}
+                onChange={(e) => setCpfCnpj(e.target.value)}
+                placeholder="000.000.000-00"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-400"
+              />
+            </div>
+
+            <button
+              onClick={handleAssinar}
+              disabled={assinalando}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition disabled:opacity-50"
+            >
+              {assinalando ? 'Processando...' : `Confirmar assinatura ${planoSelecionado === 'pro' ? 'Pro — R$ 29,90/mês' : 'Premium — R$ 49,90/mês'}`}
+            </button>
+            <p className="text-xs text-gray-400 text-center">Você receberá o link de pagamento após confirmar. Cancele quando quiser.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Link de pagamento gerado */}
+      {linkPagamento && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6 text-center">
+          <div className="text-3xl mb-3">🎉</div>
+          <h2 className="font-bold text-green-900 mb-2">Assinatura criada!</h2>
+          <p className="text-sm text-green-700 mb-4">Clique no botão abaixo para pagar e ativar seu plano.</p>
+          <a href={linkPagamento} target="_blank" rel="noopener noreferrer"
+            className="inline-block px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition">
+            Pagar agora →
+          </a>
+          <p className="text-xs text-green-600 mt-3">Após o pagamento, seu plano é ativado automaticamente.</p>
+        </div>
       )}
 
       {/* Plano atual */}
