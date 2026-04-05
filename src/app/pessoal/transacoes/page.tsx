@@ -17,9 +17,11 @@ type Transacao = {
   projeto?: { nome: string; cor?: string } | null
   cartao?: string | null
   origem: string
+  titular?: string | null
+  entidade?: string
 }
 
-type Preview = Transacao & { selecionada: boolean }
+type Preview = Transacao & { selecionada: boolean; titular?: string; entidade?: string }
 
 export default function PessoalTransacoesPage() {
   const router = useRouter()
@@ -45,6 +47,7 @@ export default function PessoalTransacoesPage() {
   const [form, setForm] = useState({
     tipo: 'despesa', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10),
     categoriaId: '', projetoId: '', cartao: '', observacoes: '',
+    titular: 'nubia', entidade: 'pessoal',
   })
 
   useEffect(() => {
@@ -89,7 +92,7 @@ export default function PessoalTransacoesPage() {
     })
     if (res.ok) {
       setShowForm(false)
-      setForm({ tipo: 'despesa', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10), categoriaId: '', projetoId: '', cartao: '', observacoes: '' })
+      setForm({ tipo: 'despesa', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10), categoriaId: '', projetoId: '', cartao: '', observacoes: '', titular: 'nubia', entidade: 'pessoal' })
       carregar()
     }
   }
@@ -305,6 +308,8 @@ export default function PessoalTransacoesPage() {
           data: t.data,
           categoria: t.categoria?.nome,
           origem: t.origem,
+          titular: t.titular || 'nubia',
+          entidade: t.entidade || 'pessoal',
         })),
       }),
     })
@@ -316,6 +321,23 @@ export default function PessoalTransacoesPage() {
       carregar()
     }
   }
+
+  // Feature 02: detecta parcelas novas (1/N) no preview
+  const parcelasNovas = preview.filter((t) => t.selecionada && t.tipo === 'despesa').reduce<
+    Array<{ nome: string; valor: number; total: number; n: number }>
+  >((acc, t) => {
+    const m = t.descricao.match(/\((\d+)\/(\d+)\)/)
+    if (!m) return acc
+    const x = parseInt(m[1]), n = parseInt(m[2])
+    if (x !== 1) return acc
+    const nome = t.descricao.replace(/\s*\(\d+\/\d+\)/, '').trim()
+    if (!acc.find((a) => a.nome === nome)) {
+      acc.push({ nome, valor: t.valor, total: t.valor * n, n })
+    }
+    return acc
+  }, [])
+
+  const totalComprometidoParcelas = parcelasNovas.reduce((s, p) => s + p.total, 0)
 
   const filtradas = transacoes.filter((t) => filtroTipo === 'todos' || t.tipo === filtroTipo)
   const totalReceitas = transacoes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + Number(t.valor), 0)
@@ -403,36 +425,74 @@ export default function PessoalTransacoesPage() {
                 </div>
               </div>
             </div>
-            <div className="max-h-[28rem] overflow-auto p-4 space-y-1">
-              {preview.map((t, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
-                  <input type="checkbox" checked={t.selecionada}
-                    onChange={(e) => {
-                      const p = [...preview]; p[i].selecionada = e.target.checked; setPreview(p)
-                    }}
-                  />
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${t.tipo === 'receita' ? 'bg-green-500' : 'bg-red-400'}`} />
-                  <span className="flex-1 text-sm text-gray-700 truncate min-w-0">{t.descricao}</span>
-                  <select
-                    value={t.categoria?.nome ?? ''}
-                    onChange={(e) => {
-                      const p = [...preview]
-                      p[i] = { ...p[i], categoria: e.target.value ? { nome: e.target.value } : null }
-                      setPreview(p)
-                    }}
-                    className="text-xs border rounded px-1.5 py-1 text-gray-600 bg-white max-w-[130px]"
-                  >
-                    <option value="">Sem categoria</option>
-                    {['Supermercado','Restaurante','Combustível','Transporte','Moradia','Saúde','Educação','Lazer','Vestuário','Loja / Compras','Serviços / Assinaturas','Impostos pessoais','Investimentos','Salário','Freelance / Consultoria','Empréstimos','Outros'].map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{new Date(t.data).toLocaleDateString('pt-BR')}</span>
-                  <span className={`text-sm font-medium flex-shrink-0 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-500'}`}>
-                    {t.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(t.valor)}
+            {/* Feature 02: alerta de parcelas novas */}
+            {parcelasNovas.length > 0 && (
+              <div className="mx-4 mt-3 mb-1 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">📦</span>
+                  <span className="text-sm font-semibold text-amber-800">
+                    {parcelasNovas.length} nova{parcelasNovas.length > 1 ? 's parcelas detectadas' : ' parcela detectada'}
+                    {' '}— compromisso total: <strong>{formatarMoeda(totalComprometidoParcelas)}</strong>
                   </span>
                 </div>
-              ))}
+                <div className="space-y-1">
+                  {parcelasNovas.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs text-amber-700 bg-amber-100/60 rounded-lg px-2 py-1">
+                      <span className="font-medium truncate flex-1">{p.nome}</span>
+                      <span className="flex-shrink-0 ml-2">{formatarMoeda(p.valor)}/mês × {p.n}x = <strong>{formatarMoeda(p.total)}</strong></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="max-h-[26rem] overflow-auto p-4 space-y-1">
+              {preview.map((t, i) => {
+                const isParcela = /\(\d+\/\d+\)/.test(t.descricao)
+                return (
+                  <div key={i} className={`flex items-center gap-2 p-2 hover:bg-gray-50 rounded ${isParcela ? 'border-l-2 border-amber-300' : ''}`}>
+                    <input type="checkbox" checked={t.selecionada}
+                      onChange={(e) => {
+                        const p = [...preview]; p[i].selecionada = e.target.checked; setPreview(p)
+                      }}
+                    />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${t.tipo === 'receita' ? 'bg-green-500' : 'bg-red-400'}`} />
+                    <span className="flex-1 text-sm text-gray-700 truncate min-w-0">{t.descricao}</span>
+                    <select
+                      value={t.categoria?.nome ?? ''}
+                      onChange={(e) => {
+                        const p = [...preview]
+                        p[i] = { ...p[i], categoria: e.target.value ? { nome: e.target.value } : null }
+                        setPreview(p)
+                      }}
+                      className="text-xs border rounded px-1.5 py-1 text-gray-600 bg-white max-w-[110px]"
+                    >
+                      <option value="">Sem categoria</option>
+                      {['Supermercado','Restaurante','Combustível','Transporte','Moradia','Saúde','Educação','Lazer','Vestuário','Loja / Compras','Serviços / Assinaturas','Impostos pessoais','Investimentos','Salário','Freelance / Consultoria','Empréstimos','Outros'].map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    {/* Titular toggle */}
+                    <button
+                      onClick={() => {
+                        const p = [...preview]
+                        p[i] = { ...p[i], titular: p[i].titular === 'matheus' ? 'nubia' : 'matheus' }
+                        setPreview(p)
+                      }}
+                      className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium transition ${
+                        t.titular === 'matheus' ? 'bg-blue-100 text-blue-700' : 'bg-rose-50 text-rose-500'
+                      }`}
+                      title="Alternar titular"
+                    >
+                      {t.titular === 'matheus' ? '👨' : '👩'}
+                    </button>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{new Date(t.data).toLocaleDateString('pt-BR')}</span>
+                    <span className={`text-sm font-medium flex-shrink-0 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-500'}`}>
+                      {t.tipo === 'despesa' ? '-' : '+'}{formatarMoeda(t.valor)}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
             <div className="p-4 border-t flex justify-between items-center">
               <span className="text-sm text-gray-500">{preview.filter((t) => t.selecionada).length} selecionada(s)</span>
@@ -482,6 +542,41 @@ export default function PessoalTransacoesPage() {
                 </select>
               )}
               <input placeholder="Cartão (opcional)" value={form.cartao} onChange={(e) => setForm({ ...form, cartao: e.target.value })} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Titular</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'nubia', label: '👩 Nubia' },
+                    { value: 'matheus', label: '👨 Matheus' },
+                  ].map((opt) => (
+                    <button key={opt.value} type="button"
+                      onClick={() => setForm({ ...form, titular: opt.value })}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium border transition ${
+                        form.titular === opt.value ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Entidade</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'pessoal', label: '👤 Pessoal' },
+                    { value: 'lar', label: '🏠 Lar' },
+                    { value: 'pj', label: '🏢 NC Adv.' },
+                  ].map((opt) => (
+                    <button key={opt.value} type="button"
+                      onClick={() => setForm({ ...form, entidade: opt.value })}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium border transition ${
+                        form.entidade === opt.value ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowForm(false)} className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>

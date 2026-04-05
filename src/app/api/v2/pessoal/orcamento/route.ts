@@ -16,23 +16,35 @@ export async function GET(req: NextRequest) {
     const orcamentos = await prisma.orcamentoPessoal.findMany({
       where: { contaPessoalId: conta.id, mes, ano },
       include: { categoria: true },
+      orderBy: { categoria: { nome: 'asc' } },
     })
 
-    // Calcula gasto real de transações do mês por categoria
+    // Gasto real por categoria E por titular
     const transacoes = await prisma.transacaoPessoal.findMany({
       where: { contaPessoalId: conta.id, mes, ano, tipo: 'despesa' },
-      select: { categoriaId: true, valor: true },
+      select: { categoriaId: true, valor: true, titular: true },
     })
 
-    const gastoReal = new Map<string, number>()
+    const gastoTotal = new Map<string, number>()
+    const gastoNubia = new Map<string, number>()
+    const gastoMatheus = new Map<string, number>()
+
     for (const t of transacoes) {
       if (!t.categoriaId) continue
-      gastoReal.set(t.categoriaId, (gastoReal.get(t.categoriaId) || 0) + Number(t.valor))
+      gastoTotal.set(t.categoriaId, (gastoTotal.get(t.categoriaId) || 0) + Number(t.valor))
+      if (t.titular === 'nubia' || !t.titular) {
+        gastoNubia.set(t.categoriaId, (gastoNubia.get(t.categoriaId) || 0) + Number(t.valor))
+      }
+      if (t.titular === 'matheus') {
+        gastoMatheus.set(t.categoriaId, (gastoMatheus.get(t.categoriaId) || 0) + Number(t.valor))
+      }
     }
 
     const resultado = orcamentos.map((o) => ({
       ...o,
-      valorGastoReal: gastoReal.get(o.categoriaId) || 0,
+      valorGastoReal: gastoTotal.get(o.categoriaId) || 0,
+      gastoNubia: gastoNubia.get(o.categoriaId) || 0,
+      gastoMatheus: gastoMatheus.get(o.categoriaId) || 0,
     }))
 
     return Response.json(resultado)
@@ -48,12 +60,12 @@ export async function POST(req: NextRequest) {
     const conta = await prisma.contaPessoal.findUnique({ where: { usuarioId: u.id } })
     if (!conta) return Response.json({ erro: 'Conta pessoal não encontrada' }, { status: 404 })
 
-    const { categoriaId, mes, ano, valorMeta } = await req.json()
+    const { categoriaId, mes, ano, valorMeta, titular } = await req.json()
 
     const orc = await prisma.orcamentoPessoal.upsert({
       where: { contaPessoalId_categoriaId_mes_ano: { contaPessoalId: conta.id, categoriaId, mes, ano } },
-      update: { valorMeta },
-      create: { contaPessoalId: conta.id, categoriaId, mes, ano, valorMeta },
+      update: { valorMeta, titular: titular || null },
+      create: { contaPessoalId: conta.id, categoriaId, mes, ano, valorMeta, titular: titular || null },
       include: { categoria: true },
     })
 

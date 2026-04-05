@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
         cartao: t.cartao || null,
         origem: t.origem || 'importacao_excel',
         observacoes: t.observacoes || null,
+        titular: t.titular || 'nubia',
+        entidade: t.entidade || 'pessoal',
       }
     })
 

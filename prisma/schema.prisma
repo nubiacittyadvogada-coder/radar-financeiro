@@ -631,6 +631,9 @@ model TransacaoPessoal {
   parcelaAtual  Int?
   origem      String   @default("manual") // 'manual' | 'importacao_excel' | 'importacao_pdf'
 
+  titular   String?  @default("nubia") // 'nubia' | 'matheus' — quem fez o gasto
+  entidade  String   @default("pessoal") // 'pessoal' | 'lar' | 'pj'
+
   observacoes String?
   criadoEm    DateTime @default(now())
 }
@@ -645,7 +648,8 @@ model OrcamentoPessoal {
   mes        Int
   ano        Int
   valorMeta  Decimal @db.Decimal(12, 2)
-  valorGasto Decimal @db.Decimal(12, 2) @default(0) // atualizado automaticamente
+  valorGasto Decimal @db.Decimal(12, 2) @default(0)
+  titular    String? // 'nubia' | 'matheus' | null = compartilhado
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt

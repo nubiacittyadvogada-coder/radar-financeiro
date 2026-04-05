@@ -57,6 +57,8 @@ export async function POST(req: NextRequest) {
         recorrente: body.recorrente || false,
         observacoes: body.observacoes || null,
         origem: body.origem || 'manual',
+        titular: body.titular || 'nubia',
+        entidade: body.entidade || 'pessoal',
       },
       include: { categoria: true },
     })

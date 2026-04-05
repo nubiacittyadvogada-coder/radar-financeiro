@@ -15,6 +15,7 @@ const NAV = [
   { href: '/pessoal/parcelas', label: 'Parcelas CC', icon: '📦' },
   { href: '/pessoal/metas', label: 'Metas', icon: '🎯' },
   { href: '/pessoal/projetos', label: 'Projetos', icon: '📁' },
+  { href: '/pessoal/entidades', label: 'Entidades', icon: '🏷️' },
   { href: '/pessoal/relatorio', label: 'Exportar', icon: '📥' },
   { href: '/pessoal/perguntar', label: 'Conselheira IA', icon: '🤖' },
   { href: '/pessoal/configuracoes', label: 'Configurações', icon: '⚙️' },
