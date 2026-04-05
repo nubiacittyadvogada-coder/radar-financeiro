@@ -33,13 +33,13 @@ export default function LoginPage() {
         // Cookie de sessão para proteção server-side via middleware
         document.cookie = `radar_sessao=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`
 
-        // Redireciona conforme modos ativos
-        if (data.usuario.isAdmin) {
-          router.push('/admin')
-        } else if (data.usuario.temEmpresa) {
+        // Redireciona conforme modos ativos (empresa/pessoal tem prioridade sobre admin)
+        if (data.usuario.temEmpresa) {
           router.push('/empresa/dashboard')
         } else if (data.usuario.temPessoal) {
           router.push('/pessoal/dashboard')
+        } else if (data.usuario.isAdmin) {
+          router.push('/admin')
         } else {
           router.push('/onboarding')
         }
