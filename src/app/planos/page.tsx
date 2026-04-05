@@ -1,4 +1,8 @@
+'use client'
+
 import Link from 'next/link'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 const planos = [
   {
@@ -88,14 +92,118 @@ const faq = [
   },
 ]
 
+function CupomInput({ planoKey }: { planoKey: string }) {
+  const router = useRouter()
+  const [aberto, setAberto] = useState(false)
+  const [codigo, setCodigo] = useState('')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'erro'>('idle')
+  const [mensagem, setMensagem] = useState('')
+  const [usuarioLogado, setUsuarioLogado] = useState<any>(null)
+
+  useEffect(() => {
+    try {
+      const u = localStorage.getItem('radar_usuario')
+      const t = localStorage.getItem('radar_token')
+      if (u && t) setUsuarioLogado({ usuario: JSON.parse(u), token: t })
+    } catch {}
+  }, [])
+
+  async function handleAplicar() {
+    const cod = codigo.toUpperCase().trim()
+    if (!cod) return
+
+    if (!usuarioLogado) {
+      // Redireciona para cadastro com plano e cupom
+      router.push(`/cadastro?plano=${planoKey}&cupom=${cod}`)
+      return
+    }
+
+    setStatus('loading')
+    setMensagem('')
+    try {
+      const res = await fetch(`/api/v2/assinatura/cupom?codigo=${cod}`, {
+        headers: { Authorization: `Bearer ${usuarioLogado.token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setStatus('erro')
+        setMensagem(data.erro || 'Cupom inválido')
+        return
+      }
+      setStatus('ok')
+      setMensagem(data.descricao || `${data.diasTrial} dias grátis no plano ${planoKey}!`)
+
+      // Se trial, aplica direto
+      if (data.tipo === 'trial') {
+        const assinarRes = await fetch('/api/v2/assinatura/assinar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${usuarioLogado.token}`,
+          },
+          body: JSON.stringify({ plano: planoKey, cupomCodigo: cod }),
+        })
+        const assinarData = await assinarRes.json()
+        if (assinarData.trial) {
+          setMensagem(`Trial ativado! Plano ${planoKey} grátis por ${data.diasTrial} dias.`)
+          setTimeout(() => router.push('/pessoal/dashboard'), 2000)
+        }
+      }
+    } catch {
+      setStatus('erro')
+      setMensagem('Erro ao validar cupom')
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setAberto(!aberto)}
+        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition"
+      >
+        {aberto ? '▲ Fechar cupom' : '🏷️ Tem um cupom?'}
+      </button>
+
+      {aberto && (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={codigo}
+            onChange={(e) => { setCodigo(e.target.value.toUpperCase()); setStatus('idle'); setMensagem('') }}
+            placeholder="Ex: TESTE30"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:border-green-400 transition"
+            onKeyDown={(e) => e.key === 'Enter' && handleAplicar()}
+          />
+          <button
+            type="button"
+            onClick={handleAplicar}
+            disabled={status === 'loading' || !codigo.trim()}
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition"
+          >
+            {status === 'loading' ? '...' : 'Aplicar'}
+          </button>
+        </div>
+      )}
+
+      {mensagem && (
+        <p className={`mt-1.5 text-xs font-medium ${status === 'ok' ? 'text-green-600' : 'text-red-500'}`}>
+          {status === 'ok' ? '✓ ' : '✕ '}{mensagem}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function PlanosPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}
       <header className="py-6 px-4 border-b bg-white">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/" className="font-bold text-gray-900 text-lg">
-            Radar Financeiro
+          <Link href="/" className="font-bold text-gray-900 text-lg flex items-center gap-2">
+            <span>📊</span>
+            <span>Radar Financeiro</span>
           </Link>
           <Link
             href="/login"
@@ -124,7 +232,7 @@ export default function PlanosPage() {
               key={plano.key}
               className={`relative rounded-2xl border-2 p-7 flex flex-col ${
                 plano.destaque
-                  ? 'border-blue-500 shadow-xl bg-white'
+                  ? 'border-green-500 shadow-xl bg-white'
                   : 'border-gray-200 bg-white'
               }`}
             >
@@ -160,16 +268,19 @@ export default function PlanosPage() {
               </ul>
 
               {plano.cta ? (
-                <Link
-                  href={plano.ctaHref}
-                  className={`w-full text-center py-3 rounded-xl font-semibold text-sm transition ${
-                    plano.destaque
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-green-600 text-white hover:bg-green-700'
-                  }`}
-                >
-                  {plano.cta}
-                </Link>
+                <>
+                  <Link
+                    href={plano.ctaHref}
+                    className={`w-full text-center py-3 rounded-xl font-semibold text-sm transition ${
+                      plano.destaque
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-gray-900 text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    {plano.cta}
+                  </Link>
+                  <CupomInput planoKey={plano.key} />
+                </>
               ) : (
                 <Link
                   href={plano.ctaHref}

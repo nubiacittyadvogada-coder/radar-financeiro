@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const { plano, cpfCnpj, billingType = 'PIX' } = await req.json()
+    const { plano, cpfCnpj, billingType = 'PIX', cupomCodigo } = await req.json()
 
     if (!['pro', 'premium'].includes(plano)) {
       return Response.json({ erro: 'Plano inválido' }, { status: 400 })
@@ -24,6 +24,29 @@ export async function POST(req: NextRequest) {
     if (!usuario) return Response.json({ erro: 'Usuário não encontrado' }, { status: 404 })
 
     const asaas = new AsaasClient(PLATFORM_KEY)
+
+    // Valida cupom se fornecido
+    let cupom: any = null
+    if (cupomCodigo) {
+      cupom = await prisma.cupomDesconto.findUnique({ where: { codigo: cupomCodigo.toUpperCase().trim() } })
+      if (cupom && cupom.ativo && cupom.tipo === 'trial' && cupom.diasTrial) {
+        // Trial: não cria assinatura no Asaas, ativa direto no banco
+        const validoAte = new Date()
+        validoAte.setDate(validoAte.getDate() + cupom.diasTrial)
+
+        await prisma.assinaturaRadar.upsert({
+          where: { usuarioId: u.id },
+          update: { plano, status: 'trial', venceEm: validoAte, valorMensal: 0, linkPagamento: null },
+          create: { usuarioId: u.id, plano, status: 'trial', venceEm: validoAte, valorMensal: 0 },
+        })
+        await prisma.usuario.update({ where: { id: u.id }, data: { plano, planoValidoAte: validoAte } })
+        await prisma.cupomDesconto.update({ where: { id: cupom.id }, data: { usoAtual: { increment: 1 } } })
+        await prisma.usoCupom.create({ data: { cupomId: cupom.id, usuarioId: u.id } })
+
+        return Response.json({ ok: true, trial: true, plano, validoAte }, { status: 201 })
+      }
+    }
+
     const planoInfo = PLANOS[plano as PlanoKey]
 
     // Cria ou reutiliza cliente Asaas

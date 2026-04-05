@@ -801,3 +801,30 @@ model PagamentoAssinatura {
   criadoEm       DateTime        @default(now())
   @@map("pagamento_assinatura")
 }
+
+model CupomDesconto {
+  id          String    @id @default(uuid())
+  codigo      String    @unique
+  descricao   String?
+  tipo        String    // 'trial' | 'percentual' | 'fixo'
+  valor       Decimal   @db.Decimal(10, 2) @default(0) // % ou R$ de desconto; 0 = trial grátis
+  diasTrial   Int?      // dias grátis (para tipo='trial')
+  planoAlvo   String    // 'pro' | 'premium' | 'ambos'
+  ativo       Boolean   @default(true)
+  usoMax      Int?      // null = ilimitado
+  usoAtual    Int       @default(0)
+  validoAte   DateTime?
+  criadoEm    DateTime  @default(now())
+  usos        UsoCupom[]
+  @@map("cupom_desconto")
+}
+
+model UsoCupom {
+  id        String        @id @default(uuid())
+  cupomId   String
+  cupom     CupomDesconto @relation(fields: [cupomId], references: [id])
+  usuarioId String
+  usadoEm   DateTime      @default(now())
+  @@unique([cupomId, usuarioId])
+  @@map("uso_cupom")
+}
