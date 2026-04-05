@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -12,6 +12,14 @@ export default function CadastroPage() {
   const [confirmar, setConfirmar] = useState('')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
+  const [plano, setPlano] = useState<string | null>(null)
+  const [cupom, setCupom] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setPlano(params.get('plano'))
+    setCupom(params.get('cupom'))
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,7 +39,29 @@ export default function CadastroPage() {
 
       localStorage.setItem('radar_token', data.token)
       localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
-      router.push('/onboarding')
+      document.cookie = `radar_sessao=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`
+
+      // Se veio com plano, vai para assinatura. Se tem cupom trial, aplica antes.
+      if (plano && cupom) {
+        // Tenta aplicar cupom trial diretamente
+        try {
+          const r = await fetch('/api/v2/assinatura/assinar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
+            body: JSON.stringify({ plano, cupomCodigo: cupom }),
+          })
+          const d = await r.json()
+          if (d.trial) {
+            router.push('/onboarding?trial=1&plano=' + plano)
+            return
+          }
+        } catch {}
+        router.push(`/onboarding?redirect=/pessoal/assinatura&plano=${plano}`)
+      } else if (plano) {
+        router.push(`/onboarding?redirect=/pessoal/assinatura&plano=${plano}`)
+      } else {
+        router.push('/onboarding')
+      }
     } catch (err: any) {
       setErro(err.message)
     } finally {
@@ -45,7 +75,16 @@ export default function CadastroPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Radar Financeiro</h1>
-            <p className="text-gray-500 mt-2">Crie sua conta gratuita</p>
+            {plano ? (
+              <div className="mt-2">
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${plano === 'premium' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {cupom ? `🎟️ Trial grátis — Plano ${plano === 'pro' ? 'Pro' : 'Premium'}` : `⭐ Assinar plano ${plano === 'pro' ? 'Pro' : 'Premium'}`}
+                </span>
+                <p className="text-gray-400 text-xs mt-1">Crie sua conta para continuar</p>
+              </div>
+            ) : (
+              <p className="text-gray-500 mt-2">Crie sua conta gratuita</p>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

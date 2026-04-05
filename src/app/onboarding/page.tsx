@@ -16,9 +16,20 @@ export default function OnboardingPage() {
     if (!u) { router.push('/login'); return }
     const usuario = JSON.parse(u)
     if (usuario.tipo !== 'usuario') { router.push('/login'); return }
-    // Se já tem modos configurados, redireciona
-    if (usuario.temEmpresa) { router.push('/empresa/dashboard'); return }
-    if (usuario.temPessoal) { router.push('/pessoal/dashboard'); return }
+    // Se já tem modos configurados, redireciona (respeitando ?redirect)
+    const params = new URLSearchParams(window.location.search)
+    const redirectUrl = params.get('redirect')
+    const plano = params.get('plano')
+    if (usuario.temEmpresa || usuario.temPessoal) {
+      if (redirectUrl && plano) {
+        router.push(`${redirectUrl}?plano=${plano}`)
+      } else if (usuario.temEmpresa) {
+        router.push('/empresa/dashboard')
+      } else {
+        router.push('/pessoal/dashboard')
+      }
+      return
+    }
   }, [router])
 
   function toggleModo(m: string) {
@@ -50,7 +61,13 @@ export default function OnboardingPage() {
       localStorage.setItem('radar_token', data.token)
       localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
 
-      if (modos.includes('empresa')) {
+      const params = new URLSearchParams(window.location.search)
+      const redirectUrl = params.get('redirect')
+      const plano = params.get('plano')
+
+      if (redirectUrl && plano) {
+        router.push(`${redirectUrl}?plano=${plano}`)
+      } else if (modos.includes('empresa')) {
         router.push('/empresa/dashboard')
       } else {
         router.push('/pessoal/dashboard')
