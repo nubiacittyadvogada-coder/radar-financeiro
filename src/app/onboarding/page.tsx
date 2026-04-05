@@ -1,10 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function OnboardingPage() {
+function OnboardingForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectUrl = searchParams.get('redirect')
+  const plano = searchParams.get('plano')
+
   const [modos, setModos] = useState<string[]>([])
   const [nomeEmpresa, setNomeEmpresa] = useState('')
   const [telefoneAlerta, setTelefoneAlerta] = useState('')
@@ -16,10 +20,7 @@ export default function OnboardingPage() {
     if (!u) { router.push('/login'); return }
     const usuario = JSON.parse(u)
     if (usuario.tipo !== 'usuario') { router.push('/login'); return }
-    // Se já tem modos configurados, redireciona (respeitando ?redirect)
-    const params = new URLSearchParams(window.location.search)
-    const redirectUrl = params.get('redirect')
-    const plano = params.get('plano')
+    // Se já tem modos configurados, redireciona (respeitando redirect+plano)
     if (usuario.temEmpresa || usuario.temPessoal) {
       if (redirectUrl && plano) {
         router.push(`${redirectUrl}?plano=${plano}`)
@@ -28,9 +29,8 @@ export default function OnboardingPage() {
       } else {
         router.push('/pessoal/dashboard')
       }
-      return
     }
-  }, [router])
+  }, [router, redirectUrl, plano])
 
   function toggleModo(m: string) {
     setModos((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])
@@ -61,10 +61,7 @@ export default function OnboardingPage() {
       localStorage.setItem('radar_token', data.token)
       localStorage.setItem('radar_usuario', JSON.stringify(data.usuario))
 
-      const params = new URLSearchParams(window.location.search)
-      const redirectUrl = params.get('redirect')
-      const plano = params.get('plano')
-
+      // Redireciona para assinatura se veio com plano, senão vai para dashboard
       if (redirectUrl && plano) {
         router.push(`${redirectUrl}?plano=${plano}`)
       } else if (modos.includes('empresa')) {
@@ -86,6 +83,13 @@ export default function OnboardingPage() {
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-900">Como você quer usar o Radar?</h1>
             <p className="text-gray-500 mt-2">Selecione um ou ambos os modos</p>
+            {plano && (
+              <div className="mt-3">
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${plano === 'premium' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                  ⭐ Plano {plano === 'pro' ? 'Pro' : 'Premium'} selecionado
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-6">
@@ -160,10 +164,18 @@ export default function OnboardingPage() {
             disabled={loading || modos.length === 0}
             className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition disabled:opacity-50"
           >
-            {loading ? 'Configurando...' : 'Continuar'}
+            {loading ? 'Configurando...' : plano ? `Continuar e assinar plano ${plano === 'pro' ? 'Pro' : 'Premium'}` : 'Continuar'}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">Carregando...</div>}>
+      <OnboardingForm />
+    </Suspense>
   )
 }
