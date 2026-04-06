@@ -79,6 +79,15 @@ export class AsaasClient {
     return data.data || []
   }
 
+  async listarInadimplentes(limite = 100) {
+    const data = await this.req(`/payments?status=OVERDUE&limit=${limite}&offset=0`)
+    return data.data || []
+  }
+
+  async buscarClientePorId(clienteId: string) {
+    return this.req(`/customers/${clienteId}`)
+  }
+
   async cancelarCobranca(id: string) {
     return this.req(`/payments/${id}`, { method: 'DELETE' })
   }

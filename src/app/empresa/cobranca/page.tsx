@@ -47,6 +47,9 @@ export default function CobrancaPage() {
   const [formCobranca, setFormCobranca] = useState({ descricao: '', valor: '', vencimento: '' })
   const [salvandoCobranca, setSalvandoCobranca] = useState(false)
   const [erro, setErro] = useState('')
+  const [importando, setImportando] = useState(false)
+  const [previewAsaas, setPreviewAsaas] = useState<any[] | null>(null)
+  const [importandoConfirm, setImportandoConfirm] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -82,6 +85,44 @@ export default function CobrancaPage() {
       alert('Erro: ' + err.message)
     } finally {
       setCobrando(null)
+    }
+  }
+
+  async function buscarDoAsaas() {
+    if (!token) return
+    setImportando(true)
+    try {
+      const res = await fetch('/api/v2/empresa/devedores/importar-asaas', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setPreviewAsaas(data)
+    } catch (err: any) {
+      alert('Erro ao buscar do Asaas: ' + err.message)
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  async function confirmarImportacao() {
+    if (!token || !previewAsaas) return
+    setImportandoConfirm(true)
+    try {
+      const res = await fetch('/api/v2/empresa/devedores/importar-asaas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clientes: previewAsaas }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setPreviewAsaas(null)
+      carregarDevedores(token)
+      alert(`✅ Importação concluída!\n${data.importados} novo(s) | ${data.atualizados} atualizado(s)`)
+    } catch (err: any) {
+      alert('Erro na importação: ' + err.message)
+    } finally {
+      setImportandoConfirm(false)
     }
   }
 
@@ -151,15 +192,71 @@ export default function CobrancaPage() {
             {devedores.length} devedor(es) — Total: {formatarMoeda(totalInadimplente)}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
-        >
-          + Cadastrar devedor
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={buscarDoAsaas}
+            disabled={importando}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 flex items-center gap-2"
+          >
+            {importando ? '⏳ Buscando...' : '🔄 Importar do Asaas'}
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
+          >
+            + Cadastrar devedor
+          </button>
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
+        {/* Modal preview Asaas */}
+        {previewAsaas && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col">
+              <h2 className="text-lg font-bold mb-1">🔄 Inadimplentes no Asaas</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                {previewAsaas.length} cliente(s) com cobranças vencidas. Confirme para importar.
+              </p>
+              <div className="overflow-y-auto flex-1 space-y-3 pr-1">
+                {previewAsaas.length === 0 ? (
+                  <p className="text-center text-gray-400 py-8">Nenhum inadimplente encontrado no Asaas.</p>
+                ) : previewAsaas.map((cli, i) => (
+                  <div key={i} className="border rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-gray-900">{cli.nome}</div>
+                        {cli.cpfCnpj && <div className="text-xs text-gray-400">{cli.cpfCnpj}</div>}
+                      </div>
+                      <div className="text-red-600 font-bold">{formatarMoeda(cli.totalDevido)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      {cli.cobrancas.map((c: any, j: number) => (
+                        <div key={j} className="flex justify-between text-xs bg-red-50 rounded px-3 py-1.5">
+                          <span className="text-gray-600">{c.descricao}</span>
+                          <span className="text-red-600 font-medium">{formatarMoeda(c.valor)} · venc. {new Date(c.vencimento).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3 mt-5 border-t pt-4">
+                <button onClick={() => setPreviewAsaas(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>
+                {previewAsaas.length > 0 && (
+                  <button
+                    onClick={confirmarImportacao}
+                    disabled={importandoConfirm}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {importandoConfirm ? 'Importando...' : `✅ Importar ${previewAsaas.length} cliente(s)`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Formulário novo devedor */}
         {showForm && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

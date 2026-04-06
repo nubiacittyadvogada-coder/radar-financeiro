@@ -11,3 +11,4 @@ scripts/tmp_*.ts
 *.log
 
 .vercel
+.env*.local
