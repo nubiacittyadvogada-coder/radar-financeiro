@@ -6,7 +6,8 @@ import Link from 'next/link'
 
 const NAV = [
   { href: '/empresa/dashboard', label: 'Dashboard', icon: '📊' },
-  { href: '/empresa/importar', label: 'Importar', icon: '📂' },
+  { href: '/empresa/lancamentos', label: 'Lançamentos', icon: '💰' },
+  { href: '/empresa/importar', label: 'Importar Extrato', icon: '📂' },
   { href: '/empresa/importacoes', label: 'Importações', icon: '🗂️' },
   { href: '/empresa/contas', label: 'Contas a Pagar', icon: '💸' },
   { href: '/empresa/historico', label: 'Histórico', icon: '📅' },
