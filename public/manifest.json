@@ -2,7 +2,7 @@
   "name": "Radar Financeiro",
   "short_name": "Radar",
   "description": "Gestão financeira pessoal e empresarial",
-  "start_url": "/pessoal/dashboard",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#16a34a",
