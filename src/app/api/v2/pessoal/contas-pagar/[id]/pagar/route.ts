@@ -7,7 +7,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaPagarPessoal.findUnique({ where: { id: params.id } })
+    // Verifica que a conta pertence ao usuário logado
+    const contaPessoal = await prisma.contaPessoal.findUnique({ where: { usuarioId: u.id } })
+    if (!contaPessoal) return Response.json({ erro: 'Conta não encontrada' }, { status: 404 })
+
+    const conta = await prisma.contaPagarPessoal.findFirst({
+      where: { id: params.id, contaPessoalId: contaPessoal.id },
+    })
     if (!conta) return Response.json({ erro: 'Conta não encontrada' }, { status: 404 })
 
     const atualizada = await prisma.contaPagarPessoal.update({
