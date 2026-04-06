@@ -35,9 +35,18 @@ export async function PATCH(req: NextRequest) {
       'asaasAtivo', 'asaasApiKey', 'zapiInstanceId', 'zapiToken', 'zapiClientToken',
       'cobrancaDescontoMax', 'cobrancaParcelasMax', 'metaLucro', 'metaReceita',
     ]
+    // Campos numéricos opcionais — string vazia vira null
+    const camposNumericos = ['cobrancaDescontoMax', 'cobrancaParcelasMax', 'metaLucro', 'metaReceita']
     const update: any = {}
     for (const key of permitidos) {
-      if (key in body) update[key] = body[key]
+      if (key in body) {
+        if (camposNumericos.includes(key)) {
+          const v = body[key]
+          update[key] = (v === '' || v === null || v === undefined) ? null : Number(v)
+        } else {
+          update[key] = body[key]
+        }
+      }
     }
 
     const atualizada = await prisma.contaEmpresa.update({
