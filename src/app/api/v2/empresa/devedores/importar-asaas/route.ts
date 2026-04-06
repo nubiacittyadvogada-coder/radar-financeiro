@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getUsuario } from '@/lib/auth-utils'
+import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import { AsaasClient } from '@/lib/asaas'
 import prisma from '@/server/lib/db'
 
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta?.asaasApiKey) return Response.json({ erro: 'Chave Asaas não configurada. Vá em Configurações da Empresa.' }, { status: 400 })
 
     const asaas = new AsaasClient(conta.asaasApiKey)
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta?.asaasApiKey) return Response.json({ erro: 'Chave Asaas não configurada.' }, { status: 400 })
 
     const body = await req.json()

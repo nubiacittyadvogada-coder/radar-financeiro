@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getUsuario } from '@/lib/auth-utils'
+import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import prisma from '@/server/lib/db'
 
 // GET /api/v2/empresa/acordos — lista acordos aguardando aprovação
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta) return Response.json({ erro: 'Conta não encontrada' }, { status: 404 })
 
     const acordos = await prisma.acordoCobranca.findMany({

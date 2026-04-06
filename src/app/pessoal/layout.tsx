@@ -40,6 +40,7 @@ export default function PessoalLayout({ children }: { children: React.ReactNode 
     if (!u) { router.push('/login'); return }
     const parsed = JSON.parse(u)
     if (parsed.tipo !== 'usuario') { router.push('/login'); return }
+    if (parsed.papel === 'funcionario') { router.push('/empresa/dashboard'); return }
     setUsuario(parsed)
   }, [router])
 

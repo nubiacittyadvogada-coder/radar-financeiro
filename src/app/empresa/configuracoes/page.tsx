@@ -14,6 +14,11 @@ export default function EmpresaConfiguracoesPage() {
   const [erro, setErro] = useState('')
   const [testando, setTestando] = useState(false)
   const [testeMsg, setTesteMsg] = useState('')
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [formFunc, setFormFunc] = useState({ nome: '', email: '', senha: '' })
+  const [salvandoFunc, setSalvandoFunc] = useState(false)
+  const [erroFunc, setErroFunc] = useState('')
+  const [usuario, setUsuario] = useState<any>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -21,8 +26,10 @@ export default function EmpresaConfiguracoesPage() {
     if (!u || !t) { router.push('/login'); return }
     const parsed = JSON.parse(u)
     if (parsed.tipo !== 'usuario') { router.push('/login'); return }
+    setUsuario(parsed)
     setToken(t)
     carregarConfig(t)
+    if (parsed.papel !== 'funcionario') carregarFuncionarios(t)
   }, [router])
 
   async function carregarConfig(t: string) {
@@ -49,6 +56,43 @@ export default function EmpresaConfiguracoesPage() {
       })
     }
     setLoading(false)
+  }
+
+  async function carregarFuncionarios(t: string) {
+    const res = await fetch('/api/v2/empresa/funcionarios', { headers: { Authorization: `Bearer ${t}` } })
+    if (res.ok) setFuncionarios(await res.json())
+  }
+
+  async function adicionarFuncionario() {
+    if (!token) return
+    if (!formFunc.nome || !formFunc.email || !formFunc.senha) { setErroFunc('Preencha todos os campos'); return }
+    setSalvandoFunc(true)
+    setErroFunc('')
+    try {
+      const res = await fetch('/api/v2/empresa/funcionarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(formFunc),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setFormFunc({ nome: '', email: '', senha: '' })
+      carregarFuncionarios(token)
+    } catch (err: any) {
+      setErroFunc(err.message)
+    } finally {
+      setSalvandoFunc(false)
+    }
+  }
+
+  async function removerFuncionario(id: string, nome: string) {
+    if (!token || !confirm(`Remover ${nome}?`)) return
+    await fetch('/api/v2/empresa/funcionarios', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id }),
+    })
+    carregarFuncionarios(token)
   }
 
   async function testarWhatsApp() {
@@ -231,6 +275,68 @@ export default function EmpresaConfiguracoesPage() {
             />
           </div>
         </div>
+
+        {/* Funcionários — só o dono vê */}
+        {usuario?.papel !== 'funcionario' && (
+          <div className="bg-white rounded-xl p-6 shadow-sm border space-y-4">
+            <h2 className="font-semibold text-gray-800">👥 Funcionários</h2>
+            <p className="text-sm text-gray-500">
+              Funcionários acessam apenas o módulo Empresa. Não têm acesso ao painel Pessoal.
+            </p>
+            {funcionarios.length > 0 && (
+              <div className="space-y-2">
+                {funcionarios.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">{f.nome}</div>
+                      <div className="text-xs text-gray-400">{f.email}</div>
+                    </div>
+                    <button
+                      onClick={() => removerFuncionario(f.id, f.nome)}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Adicionar funcionário</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Nome"
+                  value={formFunc.nome}
+                  onChange={(e) => setFormFunc({ ...formFunc, nome: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={formFunc.email}
+                  onChange={(e) => setFormFunc({ ...formFunc, email: e.target.value })}
+                  className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <input
+                type="password"
+                placeholder="Senha (mínimo 6 caracteres)"
+                value={formFunc.senha}
+                onChange={(e) => setFormFunc({ ...formFunc, senha: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              {erroFunc && <p className="text-red-600 text-xs">{erroFunc}</p>}
+              <button
+                onClick={adicionarFuncionario}
+                disabled={salvandoFunc}
+                className="w-full py-2 bg-gray-800 text-white rounded-lg text-sm hover:bg-gray-900 disabled:opacity-50"
+              >
+                {salvandoFunc ? 'Criando...' : '+ Adicionar funcionário'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {testeMsg && (
           <div className={`px-4 py-3 rounded-xl text-sm ${testeMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>

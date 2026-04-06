@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getUsuario } from '@/lib/auth-utils'
+import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import prisma from '@/server/lib/db'
 
 // POST /api/v2/empresa/devedores/[id]/cobrancas
@@ -9,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta) return Response.json({ erro: 'Conta empresa não encontrada' }, { status: 404 })
 
     const devedor = await prisma.clienteDevedor.findFirst({
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta) return Response.json({ erro: 'Conta empresa não encontrada' }, { status: 404 })
 
     const devedor = await prisma.clienteDevedor.findFirst({

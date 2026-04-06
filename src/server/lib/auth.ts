@@ -18,6 +18,8 @@ export interface TokenPayload {
   temEmpresa?: boolean
   temPessoal?: boolean
   isAdmin?: boolean
+  papel?: string      // 'dono' | 'funcionario'
+  donoId?: string     // para funcionários: userId do dono da empresa
 }
 
 export interface AuthRequest extends Request {
@@ -162,14 +164,20 @@ export async function loginUsuario(
   const senhaOk = await verificarSenha(senha, usuario.senhaHash)
   if (!senhaOk) return null
 
+  const papel = (usuario as any).papel || 'dono'
+  const donoId = (usuario as any).donoId || undefined
+
   const payload: TokenPayload = {
     id: usuario.id,
     tipo: 'usuario',
     email: usuario.email,
     nome: usuario.nome,
-    temEmpresa: !!usuario.contaEmpresa,
-    temPessoal: !!usuario.contaPessoal,
+    // funcionários têm temEmpresa=true via donoId, temPessoal=false
+    temEmpresa: papel === 'funcionario' ? !!donoId : !!usuario.contaEmpresa,
+    temPessoal: papel === 'funcionario' ? false : !!usuario.contaPessoal,
     isAdmin: usuario.isAdmin,
+    papel,
+    donoId,
   }
   return { token: gerarToken(payload), usuario: payload }
 }

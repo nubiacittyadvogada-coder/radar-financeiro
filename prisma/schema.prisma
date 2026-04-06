@@ -253,6 +253,10 @@ model Usuario {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  // Controle de acesso
+  papel        String   @default("dono")  // 'dono' | 'funcionario'
+  donoId       String?  // para funcionários: ID do Usuario dono da empresa
+
   asaasCustomerId  String?   // ID do cliente no Asaas da plataforma
   planoValidoAte   DateTime? // data de validade da assinatura paga
   assinatura       AssinaturaRadar?

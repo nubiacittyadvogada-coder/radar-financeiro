@@ -22,3 +22,16 @@ export function requireUsuario(req: NextRequest): TokenPayload | Response {
 export function isBpo(u: TokenPayload) {
   return u.tipo === 'bpo' || u.tipo === 'usuario_bpo'
 }
+
+/**
+ * Retorna o userId efetivo para buscar ContaEmpresa.
+ * Funcionários têm donoId no token — usamos o ID do dono para acessar a empresa.
+ */
+export function getEmpresaUserId(u: TokenPayload): string {
+  return (u.papel === 'funcionario' && u.donoId) ? u.donoId : u.id
+}
+
+/** Funcionários não têm acesso ao painel pessoal */
+export function podeAcessarPessoal(u: TokenPayload): boolean {
+  return u.papel !== 'funcionario'
+}

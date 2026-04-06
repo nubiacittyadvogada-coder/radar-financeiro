@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getUsuario } from '@/lib/auth-utils'
+import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import { getZApiClient } from '@/lib/zapi'
 import prisma from '@/server/lib/db'
 
@@ -9,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const u = getUsuario(req)
     if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
 
-    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: u.id } })
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
     if (!conta) return Response.json({ erro: 'Conta não encontrada' }, { status: 404 })
 
     // Verifica que o acordo pertence a esta empresa
