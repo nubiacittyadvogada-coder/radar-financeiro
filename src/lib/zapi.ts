@@ -29,7 +29,7 @@ export class ZApiClient {
         body: JSON.stringify({ phone: telefone, message: mensagem }),
       })
       const data = await res.json()
-      return res.ok && (data.zaapId || data.messageId)
+      return res.ok && !!(data.zaapId || data.messageId)
     } catch {
       return false
     }
