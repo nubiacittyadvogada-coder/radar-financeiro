@@ -78,6 +78,15 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return Response.json({ erro: 'ID obrigatório' }, { status: 400 })
 
+    const conta = await prisma.contaPessoal.findUnique({ where: { usuarioId: u.id } })
+    if (!conta) return Response.json({ erro: 'Conta não encontrada' }, { status: 404 })
+
+    // Verifica que o registro pertence ao usuário logado antes de deletar
+    const registro = await prisma.contaPagarPessoal.findFirst({
+      where: { id, contaPessoalId: conta.id },
+    })
+    if (!registro) return Response.json({ erro: 'Não encontrado' }, { status: 404 })
+
     await prisma.contaPagarPessoal.delete({ where: { id } })
     return Response.json({ ok: true })
   } catch (err: any) {
