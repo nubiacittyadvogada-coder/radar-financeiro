@@ -12,6 +12,8 @@ export default function EmpresaConfiguracoesPage() {
   const [salvando, setSalvando] = useState(false)
   const [sucesso, setSucesso] = useState(false)
   const [erro, setErro] = useState('')
+  const [testando, setTestando] = useState(false)
+  const [testeMsg, setTesteMsg] = useState('')
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -47,6 +49,25 @@ export default function EmpresaConfiguracoesPage() {
       })
     }
     setLoading(false)
+  }
+
+  async function testarWhatsApp() {
+    if (!token) return
+    setTestando(true)
+    setTesteMsg('')
+    try {
+      const res = await fetch('/api/v2/empresa/zapi/testar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setTesteMsg('✅ ' + data.mensagem)
+    } catch (err: any) {
+      setTesteMsg('❌ ' + err.message)
+    } finally {
+      setTestando(false)
+    }
   }
 
   async function salvar() {
@@ -182,7 +203,7 @@ export default function EmpresaConfiguracoesPage() {
           <p className="text-sm text-gray-500">
             Integração Z-API para enviar mensagens de cobrança personalizadas via WhatsApp.
           </p>
-          {inp('Instance ID', 'zapiInstanceId')}
+          {inp('Instance ID', 'zapiInstanceId', 'text', 'Ex: 3F13F86C80D15015D87D4AC8C214C6FF')}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Token
@@ -211,16 +232,30 @@ export default function EmpresaConfiguracoesPage() {
           </div>
         </div>
 
+        {testeMsg && (
+          <div className={`px-4 py-3 rounded-xl text-sm ${testeMsg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+            {testeMsg}
+          </div>
+        )}
         {erro && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm">{erro}</div>}
         {sucesso && <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm">Configurações salvas!</div>}
 
-        <button
-          onClick={salvar}
-          disabled={salvando}
-          className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
-          {salvando ? 'Salvando...' : 'Salvar configurações'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={testarWhatsApp}
+            disabled={testando}
+            className="flex-1 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50"
+          >
+            {testando ? 'Enviando...' : '📱 Testar WhatsApp'}
+          </button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {salvando ? 'Salvando...' : 'Salvar configurações'}
+          </button>
+        </div>
       </main>
     </div>
   )
