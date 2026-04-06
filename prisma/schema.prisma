@@ -545,7 +545,13 @@ model AcordoCobranca {
   valorOriginal  Decimal @db.Decimal(12, 2)
   valorAcordado  Decimal @db.Decimal(12, 2)
   parcelas       Int     @default(1)
-  status         String  @default("proposto") // 'proposto' | 'aceito' | 'recusado' | 'cumprido'
+  status         String  @default("proposto") // 'proposto' | 'aguardando_aprovacao' | 'aceito' | 'recusado' | 'cumprido'
+
+  // Aprovação pelo dono da empresa
+  precisaAprovacao Boolean   @default(false)  // true quando desconto > limite automático
+  mensagemProposta String?   // mensagem que a IA enviará ao devedor após aprovação
+  aprovadoPor      String?   // 'usuario' | 'automatico'
+  aprovadoEm       DateTime?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt

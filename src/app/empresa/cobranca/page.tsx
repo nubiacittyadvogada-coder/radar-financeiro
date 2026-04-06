@@ -50,6 +50,8 @@ export default function CobrancaPage() {
   const [importando, setImportando] = useState(false)
   const [previewAsaas, setPreviewAsaas] = useState<any[] | null>(null)
   const [importandoConfirm, setImportandoConfirm] = useState(false)
+  const [acordosPendentes, setAcordosPendentes] = useState<any[]>([])
+  const [decidindo, setDecidindo] = useState<string | null>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -59,6 +61,7 @@ export default function CobrancaPage() {
     if (parsed.tipo !== 'usuario') { router.push('/login'); return }
     setToken(t)
     carregarDevedores(t)
+    carregarAcordosPendentes(t)
   }, [router])
 
   async function carregarDevedores(t: string) {
@@ -66,6 +69,30 @@ export default function CobrancaPage() {
     const res = await fetch('/api/v2/empresa/devedores', { headers: { Authorization: `Bearer ${t}` } })
     if (res.ok) setDevedores(await res.json())
     setLoading(false)
+  }
+
+  async function carregarAcordosPendentes(t: string) {
+    const res = await fetch('/api/v2/empresa/acordos', { headers: { Authorization: `Bearer ${t}` } })
+    if (res.ok) setAcordosPendentes(await res.json())
+  }
+
+  async function decidirAcordo(id: string, decisao: 'aprovar' | 'rejeitar') {
+    if (!token) return
+    setDecidindo(id)
+    try {
+      const res = await fetch(`/api/v2/empresa/acordos/${id}/aprovar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decisao }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      carregarAcordosPendentes(token)
+    } catch (err: any) {
+      alert('Erro: ' + err.message)
+    } finally {
+      setDecidindo(null)
+    }
   }
 
   async function cobrar(devedorId: string) {
@@ -210,6 +237,53 @@ export default function CobrancaPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
+
+        {/* Painel de aprovações pendentes */}
+        {acordosPendentes.length > 0 && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">🔔</span>
+              <h2 className="font-bold text-yellow-800 text-lg">Negociações aguardando sua aprovação ({acordosPendentes.length})</h2>
+            </div>
+            <div className="space-y-3">
+              {acordosPendentes.map((a) => {
+                const desconto = Math.round((1 - Number(a.valorAcordado) / Number(a.valorOriginal)) * 100)
+                const fmt = (v: number) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                return (
+                  <div key={a.id} className="bg-white rounded-xl border border-yellow-100 p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900">{a.clienteDevedor.nome}</div>
+                      <div className="text-sm text-gray-500">{a.cobranca.descricao}</div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-sm">
+                        <span className="text-gray-500 line-through">{fmt(a.valorOriginal)}</span>
+                        <span className="font-bold text-green-700">{fmt(a.valorAcordado)}</span>
+                        {desconto > 0 && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs">{desconto}% desconto</span>}
+                        {a.parcelas > 1 && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{a.parcelas}x</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => decidirAcordo(a.id, 'rejeitar')}
+                        disabled={decidindo === a.id}
+                        className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                      >
+                        ✕ Recusar
+                      </button>
+                      <button
+                        onClick={() => decidirAcordo(a.id, 'aprovar')}
+                        disabled={decidindo === a.id}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {decidindo === a.id ? '...' : '✓ Aprovar'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Modal preview Asaas */}
         {previewAsaas && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
