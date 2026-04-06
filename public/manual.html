@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radar Financeiro — Manual do Usuário</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; color: #111827; background: #fff; font-size: 14px; line-height: 1.6; }
+
+  /* CAPA */
+  .capa { background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #16a34a 100%); color: white; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px; page-break-after: always; }
+  .capa .logo { font-size: 4rem; margin-bottom: 16px; }
+  .capa h1 { font-size: 2.8rem; font-weight: 800; margin-bottom: 12px; }
+  .capa .sub { font-size: 1.2rem; opacity: 0.85; margin-bottom: 48px; font-weight: 300; }
+  .capa .badge { display: inline-block; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 100px; padding: 8px 24px; font-size: 0.85rem; font-weight: 500; }
+  .capa .linha { width: 60px; height: 3px; background: rgba(255,255,255,0.4); border-radius: 2px; margin: 24px auto; }
+  .capa .versao { font-size: 0.8rem; opacity: 0.6; margin-top: 60px; }
+
+  /* LAYOUT */
+  .pagina { max-width: 800px; margin: 0 auto; padding: 60px 56px; }
+  .sumario { page-break-after: always; }
+  .sumario h2 { font-size: 1.8rem; font-weight: 700; color: #1e40af; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 3px solid #dbeafe; }
+  .sumario-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px dashed #e5e7eb; font-size: 0.95rem; }
+  .sumario-item .num { color: #2563eb; font-weight: 700; font-size: 0.8rem; width: 28px; flex-shrink: 0; }
+  .sumario-item .titulo { flex: 1; font-weight: 500; }
+  .sumario-item .pags { color: #9ca3af; font-size: 0.8rem; }
+  .sumario-secao { font-size: 0.75rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-top: 20px; margin-bottom: 6px; }
+
+  /* SEÇÕES */
+  .secao { page-break-before: always; padding-top: 20px; }
+  .secao-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb; }
+  .secao-num { background: #2563eb; color: white; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0; }
+  .secao-num.verde { background: #16a34a; }
+  .secao-num.roxo { background: #7c3aed; }
+  .secao-num.laranja { background: #ea580c; }
+  .secao-num.cinza { background: #374151; }
+  .secao h2 { font-size: 1.6rem; font-weight: 700; color: #111827; }
+
+  h3 { font-size: 1.1rem; font-weight: 700; color: #1e40af; margin: 28px 0 12px; }
+  h4 { font-size: 0.95rem; font-weight: 600; color: #374151; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; color: #374151; }
+  strong { color: #111827; }
+
+  .card { background: #f8faff; border: 1px solid #dbeafe; border-radius: 12px; padding: 20px 24px; margin: 16px 0; }
+  .card.verde { background: #f0fdf4; border-color: #bbf7d0; }
+  .card.amarelo { background: #fffbeb; border-color: #fde68a; }
+  .card.cinza { background: #f9fafb; border-color: #e5e7eb; }
+
+  .steps { margin: 16px 0; }
+  .step { display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start; }
+  .step-num { background: #2563eb; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; flex-shrink: 0; margin-top: 2px; }
+  .step-content h4 { margin: 0 0 4px; font-size: 0.95rem; }
+  .step-content p { margin: 0; font-size: 0.9rem; color: #6b7280; }
+
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .feature { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+  .feature .icon { font-size: 1.5rem; margin-bottom: 8px; }
+  .feature h4 { font-size: 0.9rem; margin: 0 0 4px; color: #111827; }
+  .feature p { font-size: 0.82rem; color: #6b7280; margin: 0; }
+
+  .planos { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .plano { border: 2px solid #e5e7eb; border-radius: 14px; padding: 20px 16px; }
+  .plano.destaque { border-color: #16a34a; background: #f0fdf4; }
+  .plano-nome { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+  .plano-preco { font-size: 1.4rem; font-weight: 800; color: #1e40af; margin-bottom: 12px; }
+  .plano-preco span { font-size: 0.75rem; font-weight: 400; color: #6b7280; }
+  .plano-item { font-size: 0.78rem; color: #374151; padding: 4px 0; border-top: 1px solid #f3f4f6; display: flex; gap: 6px; }
+  .plano-item::before { content: "✓"; color: #16a34a; font-weight: 700; flex-shrink: 0; }
+  .plano-item.nao { color: #d1d5db; }
+  .plano-item.nao::before { content: "✕"; color: #e5e7eb; }
+
+  .alerta { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 0.9rem; }
+  .dica { background: #eff6ff; border-left: 4px solid #2563eb; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 0.9rem; color: #1e40af; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+  th { background: #1e40af; color: white; padding: 10px 14px; text-align: left; font-weight: 600; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8faff; }
+
+  ul, ol { padding-left: 20px; margin: 10px 0; }
+  li { margin-bottom: 6px; color: #374151; }
+
+  .rodape { text-align: center; color: #9ca3af; font-size: 0.78rem; margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+
+  .inline-header { display: flex; align-items: center; gap: 16px; margin: 40px 0 20px; padding-bottom: 16px; border-bottom: 2px solid #e5e7eb; }
+
+  @media print {
+    body { font-size: 12px; }
+    .capa { min-height: 100vh; }
+    .pagina { padding: 40px 48px; }
+    .secao { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- CAPA -->
+<div class="capa">
+  <div class="logo">📊</div>
+  <h1>Radar Financeiro</h1>
+  <div class="linha"></div>
+  <p class="sub">Gestão financeira pessoal e empresarial com inteligência artificial</p>
+  <div class="badge">Manual do Usuário — Versão 2.0</div>
+  <p class="versao">radarfinanceiro.com.br &nbsp;·&nbsp; Abril 2026 &nbsp;·&nbsp; Documento Confidencial</p>
+</div>
+
+<!-- SUMÁRIO -->
+<div class="pagina sumario">
+  <h2>Sumário</h2>
+  <div class="sumario-secao">Introdução</div>
+  <div class="sumario-item"><span class="num">1</span><span class="titulo">O que é o Radar Financeiro</span><span class="pags">Pág. 3</span></div>
+  <div class="sumario-item"><span class="num">2</span><span class="titulo">Primeiros passos — criar conta e onboarding</span><span class="pags">Pág. 4</span></div>
+  <div class="sumario-secao">Modo Pessoal</div>
+  <div class="sumario-item"><span class="num">3</span><span class="titulo">Dashboard e visão geral</span><span class="pags">Pág. 5</span></div>
+  <div class="sumario-item"><span class="num">4</span><span class="titulo">Transações e categorias</span><span class="pags">Pág. 5</span></div>
+  <div class="sumario-item"><span class="num">5</span><span class="titulo">Importação de extratos e faturas</span><span class="pags">Pág. 6</span></div>
+  <div class="sumario-item"><span class="num">6</span><span class="titulo">Orçamento mensal e Metas</span><span class="pags">Pág. 7</span></div>
+  <div class="sumario-item"><span class="num">7</span><span class="titulo">Parcelas de cartão de crédito</span><span class="pags">Pág. 7</span></div>
+  <div class="sumario-item"><span class="num">8</span><span class="titulo">Conselheira IA</span><span class="pags">Pág. 8</span></div>
+  <div class="sumario-secao">Modo Empresa</div>
+  <div class="sumario-item"><span class="num">9</span><span class="titulo">Dashboard empresarial e DRE</span><span class="pags">Pág. 9</span></div>
+  <div class="sumario-item"><span class="num">10</span><span class="titulo">Contas a pagar e a receber</span><span class="pags">Pág. 10</span></div>
+  <div class="sumario-item"><span class="num">11</span><span class="titulo">Cobrança de inadimplentes via WhatsApp</span><span class="pags">Pág. 10</span></div>
+  <div class="sumario-item"><span class="num">12</span><span class="titulo">Importação de extratos empresariais</span><span class="pags">Pág. 11</span></div>
+  <div class="sumario-secao">Planos e Instalação</div>
+  <div class="sumario-item"><span class="num">13</span><span class="titulo">Planos disponíveis e assinatura</span><span class="pags">Pág. 12</span></div>
+  <div class="sumario-item"><span class="num">14</span><span class="titulo">Instalar no celular (PWA)</span><span class="pags">Pág. 13</span></div>
+</div>
+
+<!-- SEÇÃO 1: O QUE É -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num">1</div>
+    <h2>O que é o Radar Financeiro</h2>
+  </div>
+  <p>O <strong>Radar Financeiro</strong> é uma plataforma brasileira de gestão financeira que unifica em um só lugar o controle das suas finanças pessoais e do financeiro da sua empresa ou escritório.</p>
+  <p>Desenvolvida para profissionais, escritórios e famílias que querem organização real — sem planilhas complicadas e sem sistemas pesados demais.</p>
+
+  <div class="features">
+    <div class="feature"><div class="icon">👤</div><h4>Modo Pessoal</h4><p>Transações, orçamento, metas, parcelas do cartão, saúde financeira e conselheira IA.</p></div>
+    <div class="feature"><div class="icon">🏢</div><h4>Modo Empresa</h4><p>DRE, contas a pagar/receber, cobrança via WhatsApp, extratos e IA financeira.</p></div>
+    <div class="feature"><div class="icon">🤖</div><h4>Conselheira IA</h4><p>Responde perguntas sobre suas finanças em linguagem natural, com base nos seus dados reais.</p></div>
+    <div class="feature"><div class="icon">📄</div><h4>Importação automática</h4><p>Importe extratos bancários em PDF ou Excel. O sistema categoriza automaticamente.</p></div>
+    <div class="feature"><div class="icon">📊</div><h4>Relatórios PDF</h4><p>Gere relatórios completos mensais ou por período com um clique.</p></div>
+    <div class="feature"><div class="icon">📱</div><h4>Funciona no celular</h4><p>Acesse pelo navegador ou instale como app na tela inicial do celular.</p></div>
+  </div>
+
+  <div class="card">
+    <strong>🎯 Para quem é?</strong>
+    <ul style="margin-top:8px;">
+      <li>Advogados, contadores e profissionais liberais que querem separar finanças pessoais das profissionais</li>
+      <li>Pequenos escritórios e empresas que precisam de controle financeiro simples e eficiente</li>
+      <li>Casais e famílias que querem organizar o orçamento doméstico</li>
+      <li>Qualquer pessoa que quer saber para onde vai o dinheiro todo mês</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SEÇÃO 2: PRIMEIROS PASSOS -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num">2</div>
+    <h2>Primeiros Passos</h2>
+  </div>
+
+  <h3>Criando sua conta</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Acesse o app</h4><p>Abra o navegador e acesse <strong>radar-financeiro-roan.vercel.app</strong></p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Clique em "Começar grátis"</h4><p>Na página inicial. Não é necessário cartão de crédito.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Preencha seus dados</h4><p>Nome completo, e-mail e senha de pelo menos 6 caracteres.</p></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Escolha o modo de uso</h4><p>Selecione <strong>Pessoal</strong>, <strong>Empresa</strong> ou <strong>ambos</strong>. Se escolher Empresa, informe o nome do escritório.</p></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Pronto!</h4><p>Você será direcionado ao dashboard. Comece importando um extrato ou cadastrando sua primeira transação.</p></div></div>
+  </div>
+
+  <div class="dica">💡 <strong>Dica:</strong> Cada pessoa da equipe cria sua própria conta com seu e-mail. Os dados são individuais e privados entre usuários.</div>
+
+  <h3>Alternando entre Pessoal e Empresa</h3>
+  <p>Com os dois modos ativos, você alterna pelo menu lateral. No <strong>celular</strong>, toque no ícone ≡ → role até o rodapé do menu → botão "Modo Pessoal" ou "Modo Empresa".</p>
+
+  <h3>Fazendo login</h3>
+  <p>Acesse <strong>/login</strong>, insira seu e-mail e senha. O app lembra sua sessão por 7 dias — você não precisa fazer login todo dia.</p>
+</div>
+
+<!-- SEÇÃO 3 e 4: DASHBOARD + TRANSAÇÕES -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num verde">3</div>
+    <h2>Dashboard Pessoal</h2>
+  </div>
+  <p>Tela principal do Modo Pessoal. Mostra o resumo completo da situação financeira do mês atual.</p>
+
+  <table>
+    <tr><th>Elemento</th><th>O que mostra</th></tr>
+    <tr><td><strong>Saldo do mês</strong></td><td>Receitas menos despesas do período</td></tr>
+    <tr><td><strong>Receitas</strong></td><td>Total de entradas (salário, freelances, etc.)</td></tr>
+    <tr><td><strong>Despesas</strong></td><td>Total de saídas agrupadas por categoria</td></tr>
+    <tr><td><strong>Gráfico</strong></td><td>Distribuição dos gastos em categorias</td></tr>
+    <tr><td><strong>Últimas transações</strong></td><td>Movimentações recentes com data e categoria</td></tr>
+    <tr><td><strong>Saúde financeira</strong></td><td>Score baseado em metas e gastos</td></tr>
+  </table>
+
+  <div class="inline-header">
+    <div class="secao-num verde">4</div>
+    <h2>Transações e Categorias</h2>
+  </div>
+
+  <h3>Cadastrando uma transação manualmente</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Acesse "Transações"</h4><p>No menu lateral ou barra inferior (celular).</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Clique em "+ Nova transação"</h4><p>Um formulário será exibido.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Preencha os campos</h4><p>Tipo (Receita/Despesa), Valor, Data, Descrição e Categoria.</p></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Salvar</h4><p>A transação aparece na lista e atualiza o dashboard imediatamente.</p></div></div>
+  </div>
+
+  <div class="card cinza">
+    <strong>Categorias disponíveis:</strong>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.85rem;margin-top:8px;">
+      <div>🍽️ Alimentação</div><div>🏠 Moradia / Aluguel</div>
+      <div>🚗 Transporte</div><div>💊 Saúde</div>
+      <div>📚 Educação</div><div>🎉 Lazer</div>
+      <div>💡 Contas/Utilidades</div><div>💰 Salário / Renda</div>
+      <div>💳 Cartão de crédito</div><div>🏷️ Outras</div>
+    </div>
+  </div>
+</div>
+
+<!-- SEÇÃO 5: IMPORTAÇÃO -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num verde">5</div>
+    <h2>Importação de Extratos e Faturas</h2>
+  </div>
+  <p>O jeito mais rápido de lançar todas as movimentações de um período sem digitar uma a uma.</p>
+
+  <h3>Formatos aceitos</h3>
+  <div class="card">
+    <ul>
+      <li><strong>PDF:</strong> Extrato bancário ou fatura de cartão (maioria dos bancos brasileiros)</li>
+      <li><strong>Excel (.xlsx / .xls):</strong> Planilha exportada do banco</li>
+      <li><strong>CSV:</strong> Arquivo texto separado por vírgula ou ponto-e-vírgula</li>
+    </ul>
+  </div>
+
+  <h3>Como importar</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Acesse "Importar"</h4><p>No menu lateral ou barra inferior.</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Selecione o arquivo</h4><p>Arraste ou clique para escolher o PDF/Excel do extrato.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Revise as transações</h4><p>O sistema lê e categoriza automaticamente. Você pode ajustar antes de confirmar.</p></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Confirmar importação</h4><p>As transações são salvas e o dashboard atualiza na hora.</p></div></div>
+  </div>
+
+  <div class="alerta">⚠️ <strong>Plano Básico:</strong> até 3 importações/mês. Planos Pro e Premium têm importações ilimitadas.</div>
+
+  <h3>Dicas para importação bem-sucedida</h3>
+  <ul>
+    <li>Exporte o extrato diretamente do site do banco (não tire foto da tela)</li>
+    <li>Prefira um mês por vez para facilitar a conferência</li>
+    <li>Evite importar o mesmo período duas vezes para não duplicar lançamentos</li>
+    <li>Bancos testados: BB, Bradesco, Itaú, Santander, Caixa, Nubank, Inter, C6</li>
+  </ul>
+</div>
+
+<!-- SEÇÃO 6 e 7: ORÇAMENTO + PARCELAS -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num verde">6</div>
+    <h2>Orçamento Mensal e Metas</h2>
+  </div>
+
+  <h3>Orçamento</h3>
+  <p>Defina um limite de gastos para cada categoria. Quando você se aproxima ou ultrapassa o limite, o app avisa.</p>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Acesse "Orçamento"</h4><p>No menu lateral.</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Defina o limite por categoria</h4><p>Ex: Alimentação R$800, Transporte R$400, Lazer R$300.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Acompanhe em tempo real</h4><p>Barras de progresso mostram o consumo vs. o limite.</p></div></div>
+  </div>
+
+  <h3>Metas Financeiras</h3>
+  <p>Crie metas para objetivos específicos: reserva de emergência, viagem, entrada de imóvel, etc.</p>
+  <table>
+    <tr><th>Campo</th><th>Descrição</th></tr>
+    <tr><td><strong>Nome da meta</strong></td><td>Ex: "Reserva emergência", "Viagem Europa"</td></tr>
+    <tr><td><strong>Valor total</strong></td><td>Quanto você quer acumular</td></tr>
+    <tr><td><strong>Valor atual</strong></td><td>Quanto já tem guardado</td></tr>
+    <tr><td><strong>Data alvo</strong></td><td>Prazo para atingir a meta</td></tr>
+    <tr><td><strong>Aporte sugerido</strong></td><td>Calculado automaticamente pelo sistema</td></tr>
+  </table>
+
+  <div class="inline-header">
+    <div class="secao-num verde">7</div>
+    <h2>Parcelas de Cartão de Crédito</h2>
+  </div>
+  <p>Visualize o total de compromissos futuros no cartão e evite surpresas na fatura.</p>
+  <div class="card">
+    <ul>
+      <li>Cadastre compras parceladas com número de parcelas e valor</li>
+      <li>Veja o calendário de vencimentos mês a mês</li>
+      <li>Visualize o total comprometido em cada fatura futura</li>
+      <li>Marque parcelas como pagas conforme vencerem</li>
+    </ul>
+  </div>
+  <div class="alerta">⚠️ <strong>Recurso Pro/Premium:</strong> disponível a partir do plano Pro (R$29,90/mês).</div>
+</div>
+
+<!-- SEÇÃO 8: CONSELHEIRA IA -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num roxo">8</div>
+    <h2>Conselheira IA</h2>
+  </div>
+  <p>A Conselheira é uma inteligência artificial treinada em finanças pessoais que lê os seus dados reais e responde perguntas em linguagem natural — sem economês, sem complicação.</p>
+
+  <h3>Como acessar</h3>
+  <p>Menu lateral → <strong>"Perguntar"</strong> (ícone 🤖). Digite sua pergunta normalmente, como enviaria uma mensagem de WhatsApp.</p>
+
+  <h3>Exemplos de perguntas</h3>
+  <div class="card cinza">
+    <ul>
+      <li>"Quanto gastei com alimentação este mês?"</li>
+      <li>"Estou conseguindo bater minha meta de economias?"</li>
+      <li>"Quais categorias estão acima do orçamento?"</li>
+      <li>"Como está minha saúde financeira comparada ao mês passado?"</li>
+      <li>"Quais são os meus maiores gastos fixos?"</li>
+      <li>"Preciso cortar gastos. Onde devo começar?"</li>
+      <li>"Quanto sobra no final do mês se eu manter esses gastos?"</li>
+    </ul>
+  </div>
+
+  <table style="margin-top:20px;">
+    <tr><th>Plano</th><th>Consultas por mês</th></tr>
+    <tr><td>Básico</td><td>Não disponível</td></tr>
+    <tr><td>Pro</td><td>30 consultas/mês</td></tr>
+    <tr><td>Premium</td><td>Ilimitado</td></tr>
+  </table>
+
+  <div class="dica">💡 <strong>Dica:</strong> Quanto mais transações você tiver lançadas, mais precisa e útil será a resposta da Conselheira. Importe seus extratos antes de usar a IA para melhores resultados.</div>
+</div>
+
+<!-- SEÇÃO 9: EMPRESA -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num laranja">9</div>
+    <h2>Dashboard Empresarial e DRE</h2>
+  </div>
+  <p>O Modo Empresa foi desenvolvido para escritórios de advocacia, contabilidade e pequenas empresas que precisam de controle financeiro profissional sem a complexidade de sistemas ERP.</p>
+
+  <h3>Dashboard Empresa</h3>
+  <table>
+    <tr><th>Indicador</th><th>O que significa</th></tr>
+    <tr><td><strong>Receita do mês</strong></td><td>Total de entradas (honorários, serviços, vendas)</td></tr>
+    <tr><td><strong>Despesas do mês</strong></td><td>Total de saídas (fornecedores, salários, custos)</td></tr>
+    <tr><td><strong>Resultado</strong></td><td>Lucro ou prejuízo do período</td></tr>
+    <tr><td><strong>Contas vencendo</strong></td><td>Alertas de vencimentos nos próximos 7 dias</td></tr>
+    <tr><td><strong>Inadimplentes</strong></td><td>Clientes com pagamentos em atraso</td></tr>
+  </table>
+
+  <h3>DRE — Demonstração do Resultado do Exercício</h3>
+  <p>O DRE mostra a estrutura completa de receitas e despesas, organizado da forma que contadores e gestores precisam:</p>
+  <div class="card">
+    <ul style="list-style:none;padding:0;">
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;">📈 Receita Bruta</li>
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;">(–) Deduções e impostos</li>
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;font-weight:600;">= Receita Líquida</li>
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;">(–) Custos operacionais</li>
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;font-weight:600;">= Lucro Bruto</li>
+      <li style="padding:4px 0;border-bottom:1px solid #e5e7eb;color:#6b7280;">(–) Despesas administrativas e financeiras</li>
+      <li style="padding:4px 0;font-weight:700;color:#16a34a;">= Resultado Líquido do período</li>
+    </ul>
+  </div>
+  <div class="dica">💡 Exporte o DRE em PDF para apresentar para sócios, investidores ou contador a qualquer momento.</div>
+</div>
+
+<!-- SEÇÃO 10, 11, 12 -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num laranja">10</div>
+    <h2>Contas a Pagar e a Receber</h2>
+  </div>
+
+  <h3>Contas a Pagar</h3>
+  <p>Cadastre obrigações financeiras com data de vencimento, valor e fornecedor. O sistema alerta quando um vencimento se aproxima.</p>
+  <div class="features">
+    <div class="feature"><div class="icon">📅</div><h4>Calendário de vencimentos</h4><p>Visualize todos os pagamentos do mês para nunca perder um prazo.</p></div>
+    <div class="feature"><div class="icon">✅</div><h4>Marcar como pago</h4><p>Um clique registra o pagamento no fluxo de caixa.</p></div>
+  </div>
+
+  <h3>Contas a Receber</h3>
+  <p>Registre os recebíveis (honorários, serviços prestados) e acompanhe os que estão em aberto, vencidos ou pagos.</p>
+
+  <div class="inline-header">
+    <div class="secao-num laranja">11</div>
+    <h2>Cobrança via WhatsApp</h2>
+  </div>
+  <p>Para clientes com pagamentos em atraso, o Radar envia cobranças automáticas via WhatsApp — sem você precisar entrar em contato manualmente.</p>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Identificar inadimplentes</h4><p>O sistema lista automaticamente contas a receber vencidas.</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Acionar cobrança</h4><p>Clique em "Cobrar" — uma mensagem profissional é enviada via WhatsApp para o número do cliente.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Acompanhar</h4><p>O histórico de cobranças fica registrado por cliente.</p></div></div>
+  </div>
+  <div class="alerta">⚠️ Configure o WhatsApp de alertas nas Configurações do Modo Empresa durante o onboarding.</div>
+</div>
+
+<!-- SEÇÃO 13: PLANOS -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num cinza">13</div>
+    <h2>Planos e Assinatura</h2>
+  </div>
+
+  <div class="planos">
+    <div class="plano">
+      <div class="plano-nome">Básico</div>
+      <div class="plano-preco">Grátis <span>para sempre</span></div>
+      <div class="plano-item">1 modo ativo</div>
+      <div class="plano-item">Até 3 importações/mês</div>
+      <div class="plano-item">Dashboard e transações</div>
+      <div class="plano-item">Orçamento básico</div>
+      <div class="plano-item nao">Conselheira IA</div>
+      <div class="plano-item nao">Relatório PDF</div>
+      <div class="plano-item nao">Parcelas CC</div>
+    </div>
+    <div class="plano destaque">
+      <div class="plano-nome">⭐ Pro — Recomendado</div>
+      <div class="plano-preco">R$29,90 <span>/mês</span></div>
+      <div class="plano-item">Pessoal + Empresa</div>
+      <div class="plano-item">Importações ilimitadas</div>
+      <div class="plano-item">IA — 30 consultas/mês</div>
+      <div class="plano-item">Relatório PDF</div>
+      <div class="plano-item">Parcelas CC</div>
+      <div class="plano-item">Alertas WhatsApp</div>
+      <div class="plano-item">Metas e casamento</div>
+    </div>
+    <div class="plano">
+      <div class="plano-nome">Premium</div>
+      <div class="plano-preco">R$49,90 <span>/mês</span></div>
+      <div class="plano-item">Tudo do Pro</div>
+      <div class="plano-item">IA ilimitada</div>
+      <div class="plano-item">Multi-entidade</div>
+      <div class="plano-item">Análises avançadas</div>
+      <div class="plano-item">Suporte WhatsApp</div>
+      <div class="plano-item">Acesso antecipado</div>
+    </div>
+  </div>
+
+  <div class="card amarelo">
+    <strong>💡 Recomendação:</strong> Para escritórios e profissionais que precisam dos dois modos + IA, o <strong>plano Pro por R$29,90/mês</strong> é a melhor relação custo-benefício.
+  </div>
+
+  <h3>Como assinar</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Acesse "Meu Plano"</h4><p>Menu lateral ou vá para <strong>/planos</strong>.</p></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Escolha e clique em "Assinar"</h4><p>Selecione Pro ou Premium.</p></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Escolha o pagamento</h4><p><strong>PIX</strong> (imediato) | <strong>Boleto</strong> (3 dias) | <strong>Cartão de crédito</strong> (na hora).</p></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Plano ativado!</h4><p>Assim que o pagamento é confirmado, os recursos são liberados automaticamente.</p></div></div>
+  </div>
+
+  <p><strong>Cancelamento:</strong> Cancele quando quiser em "Meu Plano". O acesso fica ativo até o fim do período pago. Depois, retorna ao Básico sem perder dados.</p>
+</div>
+
+<!-- SEÇÃO 14: PWA -->
+<div class="pagina secao">
+  <div class="secao-header">
+    <div class="secao-num cinza">14</div>
+    <h2>Instalar no Celular</h2>
+  </div>
+
+  <p>O Radar Financeiro pode ser instalado como um app na tela inicial do celular — <strong>sem precisar de App Store ou Google Play</strong>. O processo é simples e leva menos de 1 minuto.</p>
+
+  <div class="features">
+    <div class="feature">
+      <div class="icon">🍎</div>
+      <h4>iPhone (Safari)</h4>
+      <p>1. Abra o link no <strong>Safari</strong><br>2. Toque em Compartilhar ⬆️<br>3. "Adicionar à Tela de Início"<br>4. Toque em <strong>Adicionar</strong></p>
+    </div>
+    <div class="feature">
+      <div class="icon">🤖</div>
+      <h4>Android (Chrome)</h4>
+      <p>1. Abra o link no <strong>Chrome</strong><br>2. Aparece banner "Instalar app"<br>3. Ou toque nos 3 pontos ⋮<br>4. "Adicionar à tela inicial"</p>
+    </div>
+  </div>
+
+  <div class="card verde">
+    <strong>✅ Após instalar:</strong> O app aparece na tela do celular com ícone próprio, abre em tela cheia (sem barra do navegador) e funciona como app nativo — sem ocupar espaço como apps da loja.
+  </div>
+
+  <h3>Link de acesso</h3>
+  <div class="card" style="text-align:center;font-size:1.1rem;font-weight:700;letter-spacing:0.5px;">
+    📲 radar-financeiro-roan.vercel.app
+  </div>
+
+  <div class="rodape">
+    Radar Financeiro — Manual do Usuário v2.0 &nbsp;·&nbsp; Abril 2026<br>
+    Documento confidencial — uso interno e apresentação comercial &nbsp;·&nbsp; Todos os direitos reservados
+  </div>
+</div>
+
+</body>
+</html>
