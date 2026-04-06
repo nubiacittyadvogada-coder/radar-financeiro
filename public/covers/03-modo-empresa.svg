@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f093fb"/>
+      <stop offset="100%" style="stop-color:#f5576c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1080" height="1920" fill="url(#bg)"/>
+
+  <!-- Decorative circle -->
+  <circle cx="540" cy="750" r="220" fill="none" stroke="url(#accent)" stroke-width="4" opacity="0.3"/>
+
+  <!-- Icon: Building/Business -->
+  <g transform="translate(540, 750)">
+    <!-- Building -->
+    <rect x="-70" y="-120" width="140" height="200" rx="6" fill="none" stroke="#f5576c" stroke-width="3" opacity="0.7"/>
+    <!-- Windows -->
+    <rect x="-50" y="-95" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <rect x="-10" y="-95" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <rect x="-50" y="-55" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <rect x="-10" y="-55" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <rect x="-50" y="-15" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <rect x="-10" y="-15" width="30" height="25" rx="3" fill="#f5576c" opacity="0.2"/>
+    <!-- Door -->
+    <rect x="-20" y="40" width="40" height="40" rx="4" fill="#f5576c" opacity="0.3"/>
+
+    <!-- DRE chart small -->
+    <g transform="translate(120, -20)">
+      <rect x="0" y="30" width="16" height="50" rx="3" fill="#f093fb" opacity="0.4"/>
+      <rect x="24" y="10" width="16" height="70" rx="3" fill="#f093fb" opacity="0.5"/>
+      <rect x="48" y="-10" width="16" height="90" rx="3" fill="#f093fb" opacity="0.6"/>
+    </g>
+
+    <!-- WhatsApp icon hint -->
+    <circle cx="-120" cy="40" r="25" fill="none" stroke="#25D366" stroke-width="2.5" opacity="0.5"/>
+    <text x="-120" y="48" text-anchor="middle" fill="#25D366" font-family="Arial, sans-serif" font-size="22" opacity="0.6">W</text>
+  </g>
+
+  <!-- Title -->
+  <text x="540" y="1120" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="64" font-weight="bold" letter-spacing="4">MODO</text>
+  <text x="540" y="1200" text-anchor="middle" fill="#f5576c" font-family="Arial, sans-serif" font-size="64" font-weight="bold" letter-spacing="4">EMPRESA</text>
+
+  <!-- Subtitle -->
+  <text x="540" y="1280" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" opacity="0.6">DRE, contas e cobranca via WhatsApp</text>
+
+  <!-- Bottom accent line -->
+  <rect x="440" y="1340" width="200" height="3" rx="2" fill="url(#accent)" opacity="0.5"/>
+
+  <!-- Brand -->
+  <text x="540" y="1800" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="24" opacity="0.3" letter-spacing="6">RADAR FINANCEIRO</text>
+</svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#43e97b"/>
+      <stop offset="100%" style="stop-color:#38f9d7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1080" height="1920" fill="url(#bg)"/>
+
+  <!-- Decorative circle -->
+  <circle cx="540" cy="750" r="220" fill="none" stroke="url(#accent)" stroke-width="4" opacity="0.3"/>
+
+  <!-- Icon: Star/Trophy -->
+  <g transform="translate(540, 720)">
+    <!-- Star -->
+    <polygon points="0,-100 23,-40 88,-40 35,5 55,68 0,30 -55,68 -35,5 -88,-40 -23,-40" fill="none" stroke="#43e97b" stroke-width="3" opacity="0.7"/>
+    <polygon points="0,-70 16,-28 62,-28 25,4 39,48 0,21 -39,48 -25,4 -62,-28 -16,-28" fill="#43e97b" opacity="0.1"/>
+
+    <!-- Quotes/testimonial lines -->
+    <text x="-80" y="120" fill="#38f9d7" font-family="Georgia, serif" font-size="80" opacity="0.3">"</text>
+    <rect x="-40" y="120" width="120" height="6" rx="3" fill="#43e97b" opacity="0.2"/>
+    <rect x="-30" y="140" width="90" height="6" rx="3" fill="#43e97b" opacity="0.15"/>
+    <text x="90" y="160" fill="#38f9d7" font-family="Georgia, serif" font-size="80" opacity="0.3">"</text>
+  </g>
+
+  <!-- Title -->
+  <text x="540" y="1120" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="64" font-weight="bold" letter-spacing="4">RESULTADOS</text>
+
+  <!-- Subtitle -->
+  <text x="540" y="1200" text-anchor="middle" fill="#43e97b" font-family="Arial, sans-serif" font-size="32" opacity="0.8">Depoimentos de beta testers</text>
+  <text x="540" y="1250" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" opacity="0.6">Antes e depois financeiro</text>
+
+  <!-- Bottom accent line -->
+  <rect x="440" y="1310" width="200" height="3" rx="2" fill="url(#accent)" opacity="0.5"/>
+
+  <!-- Brand -->
+  <text x="540" y="1800" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="24" opacity="0.3" letter-spacing="6">RADAR FINANCEIRO</text>
+</svg>
