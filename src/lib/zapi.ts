@@ -29,7 +29,8 @@ export class ZApiClient {
         body: JSON.stringify({ phone: telefone, message: mensagem }),
       })
       const data = await res.json()
-      return res.ok && !!(data.zaapId || data.messageId)
+      // Z-API retorna { id, phone, status } — basta checar res.ok
+      return res.ok && !data.error
     } catch {
       return false
     }
