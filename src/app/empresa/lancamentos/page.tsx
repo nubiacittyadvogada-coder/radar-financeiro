@@ -49,6 +49,7 @@ export default function EmpresaLancamentosPage() {
   const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [ano, setAno] = useState(hoje.getFullYear())
   const [modal, setModal] = useState<'receita' | 'despesa' | null>(null)
+  const [editandoId, setEditandoId] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
 
   const [form, setForm] = useState({
@@ -85,8 +86,28 @@ export default function EmpresaLancamentosPage() {
   useEffect(() => { carregar() }, [carregar])
 
   function abrirModal(tipo: 'receita' | 'despesa') {
+    setEditandoId(null)
     setForm({ categoria: '', favorecido: '', descricao: '', valor: '', data: new Date().toISOString().slice(0, 10), pago: true, formaPagamento: '', observacoes: '' })
     setModal(tipo)
+  }
+
+  function abrirEdicao(l: Lancamento) {
+    const isReceita = l.tipo === 'receita'
+    const cats = isReceita ? CATS_RECEITA : CATS_DESPESA
+    // Tenta encontrar categoria pelo subtipo ou pelo planoConta
+    const cat = cats.find(c => c.value === l.subtipo) || cats.find(c => c.planoConta === l.planoConta) || cats[0]
+    setEditandoId(l.id)
+    setForm({
+      categoria: cat?.value || '',
+      favorecido: l.favorecido || '',
+      descricao: l.descricao || '',
+      valor: String(Math.abs(Number(l.valor))),
+      data: l.dataCompetencia ? l.dataCompetencia.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      pago: l.statusPg === 'pago',
+      formaPagamento: '',
+      observacoes: '',
+    })
+    setModal(isReceita ? 'receita' : 'despesa')
   }
 
   async function salvar() {
@@ -95,24 +116,48 @@ export default function EmpresaLancamentosPage() {
     try {
       const cats = modal === 'receita' ? CATS_RECEITA : CATS_DESPESA
       const cat = cats.find(c => c.value === form.categoria)!
-      await fetch('/api/v2/empresa/lancamentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          tipo: cat.tipo,
-          subtipo: modal === 'receita' ? form.categoria : null,
-          planoConta: cat.planoConta,
-          grupoConta: modal === 'receita' ? 'Receitas' : 'Despesas',
-          favorecido: form.favorecido || null,
-          descricao: form.descricao || cat.label,
-          valor: parseFloat(form.valor.replace(',', '.')),
-          data: form.data,
-          pago: form.pago,
-          formaPagamento: form.formaPagamento || null,
-          observacoes: form.observacoes || null,
-        }),
-      })
+
+      if (editandoId) {
+        // Editar existente
+        await fetch('/api/v2/empresa/lancamentos', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            id: editandoId,
+            tipo: cat.tipo,
+            subtipo: modal === 'receita' ? form.categoria : null,
+            planoConta: cat.planoConta,
+            grupoConta: modal === 'receita' ? 'Receitas' : 'Despesas',
+            favorecido: form.favorecido || null,
+            descricao: form.descricao || cat.label,
+            valor: parseFloat(form.valor.replace(',', '.')),
+            data: form.data,
+            pago: form.pago,
+            observacoes: form.observacoes || null,
+          }),
+        })
+      } else {
+        // Novo lançamento
+        await fetch('/api/v2/empresa/lancamentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            tipo: cat.tipo,
+            subtipo: modal === 'receita' ? form.categoria : null,
+            planoConta: cat.planoConta,
+            grupoConta: modal === 'receita' ? 'Receitas' : 'Despesas',
+            favorecido: form.favorecido || null,
+            descricao: form.descricao || cat.label,
+            valor: parseFloat(form.valor.replace(',', '.')),
+            data: form.data,
+            pago: form.pago,
+            formaPagamento: form.formaPagamento || null,
+            observacoes: form.observacoes || null,
+          }),
+        })
+      }
       setModal(null)
+      setEditandoId(null)
       carregar()
     } finally { setSalvando(false) }
   }
@@ -209,7 +254,7 @@ export default function EmpresaLancamentosPage() {
                   <span className="text-sm font-bold text-green-700">{formatarMoeda(totalReceitas)}</span>
                 </div>
                 {receitas.map(l => (
-                  <LancamentoRow key={l.id} l={l} onDelete={() => excluir(l.id)} />
+                  <LancamentoRow key={l.id} l={l} onEdit={() => abrirEdicao(l)} onDelete={() => excluir(l.id)} />
                 ))}
               </>
             )}
@@ -221,7 +266,7 @@ export default function EmpresaLancamentosPage() {
                   <span className="text-sm font-bold text-red-600">{formatarMoeda(totalDespesas)}</span>
                 </div>
                 {despesas.map(l => (
-                  <LancamentoRow key={l.id} l={l} onDelete={() => excluir(l.id)} />
+                  <LancamentoRow key={l.id} l={l} onEdit={() => abrirEdicao(l)} onDelete={() => excluir(l.id)} />
                 ))}
               </>
             )}
@@ -240,7 +285,9 @@ export default function EmpresaLancamentosPage() {
           <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className={`text-base font-semibold ${modal === 'receita' ? 'text-green-700' : 'text-red-600'}`}>
-                {modal === 'receita' ? '📈 Nova Receita' : '📉 Nova Despesa'}
+                {editandoId
+                  ? (modal === 'receita' ? '✏️ Editar Receita' : '✏️ Editar Despesa')
+                  : (modal === 'receita' ? '📈 Nova Receita' : '📉 Nova Despesa')}
               </h3>
               <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
             </div>
@@ -344,7 +391,7 @@ export default function EmpresaLancamentosPage() {
                 disabled={salvando || !form.categoria || !form.valor}
                 className={`flex-1 py-2.5 text-white rounded-lg text-sm font-medium disabled:opacity-50 ${modal === 'receita' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'}`}
               >
-                {salvando ? 'Salvando...' : `Salvar ${modal === 'receita' ? 'receita' : 'despesa'}`}
+                {salvando ? 'Salvando...' : editandoId ? 'Salvar alterações' : `Salvar ${modal === 'receita' ? 'receita' : 'despesa'}`}
               </button>
             </div>
           </div>
@@ -354,7 +401,7 @@ export default function EmpresaLancamentosPage() {
   )
 }
 
-function LancamentoRow({ l, onDelete }: { l: Lancamento; onDelete: () => void }) {
+function LancamentoRow({ l, onEdit, onDelete }: { l: Lancamento; onEdit: () => void; onDelete: () => void }) {
   const isReceita = l.tipo === 'receita'
   const data = l.dataCompetencia ? new Date(l.dataCompetencia).toLocaleDateString('pt-BR') : '—'
   const pago = l.statusPg === 'pago'
@@ -383,9 +430,12 @@ function LancamentoRow({ l, onDelete }: { l: Lancamento; onDelete: () => void })
           {pago ? '● pago' : '○ pendente'}
         </div>
       </div>
-      {l.origem === 'manual' && (
-        <button onClick={onDelete} className="text-gray-300 hover:text-red-400 text-sm flex-shrink-0 ml-1">✕</button>
-      )}
+      <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+        <button onClick={onEdit} className="text-gray-300 hover:text-blue-500 text-sm p-1" title="Editar">✏️</button>
+        {l.origem === 'manual' && (
+          <button onClick={onDelete} className="text-gray-300 hover:text-red-400 text-sm p-1" title="Excluir">✕</button>
+        )}
+      </div>
     </div>
   )
 }

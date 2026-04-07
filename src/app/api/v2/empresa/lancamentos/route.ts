@@ -69,6 +69,53 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH /api/v2/empresa/lancamentos — edita qualquer lançamento (manual ou importado)
+export async function PATCH(req: NextRequest) {
+  try {
+    const u = getUsuario(req)
+    if (!u || u.tipo !== 'usuario') return Response.json({ erro: 'Não autorizado' }, { status: 401 })
+
+    const conta = await prisma.contaEmpresa.findUnique({ where: { usuarioId: getEmpresaUserId(u) } })
+    if (!conta) return Response.json({ erro: 'Conta empresa não encontrada' }, { status: 404 })
+
+    const body = await req.json()
+    const { id, ...campos } = body
+    if (!id) return Response.json({ erro: 'ID obrigatório' }, { status: 400 })
+
+    const lanc = await prisma.lancamentoEmpresa.findFirst({ where: { id, contaEmpresaId: conta.id } })
+    if (!lanc) return Response.json({ erro: 'Lançamento não encontrado' }, { status: 404 })
+
+    const data = campos.data ? new Date(campos.data) : undefined
+    const atualizado = await prisma.lancamentoEmpresa.update({
+      where: { id },
+      data: {
+        ...(campos.tipo !== undefined && { tipo: campos.tipo }),
+        ...(campos.subtipo !== undefined && { subtipo: campos.subtipo }),
+        ...(campos.planoConta !== undefined && { planoConta: campos.planoConta }),
+        ...(campos.grupoConta !== undefined && { grupoConta: campos.grupoConta }),
+        ...(campos.favorecido !== undefined && { favorecido: campos.favorecido }),
+        ...(campos.descricao !== undefined && { descricao: campos.descricao }),
+        ...(campos.valor !== undefined && { valor: campos.valor }),
+        ...(campos.observacoes !== undefined && { observacoes: campos.observacoes }),
+        ...(campos.formaPagamento !== undefined && { formaPagamento: campos.formaPagamento }),
+        ...(data && {
+          dataCompetencia: data,
+          mes: data.getMonth() + 1,
+          ano: data.getFullYear(),
+        }),
+        ...(campos.pago !== undefined && {
+          statusPg: campos.pago ? 'pago' : 'pendente',
+          dataPagamento: campos.pago ? new Date() : null,
+        }),
+      },
+    })
+
+    return Response.json(atualizado)
+  } catch (err: any) {
+    return Response.json({ erro: err.message }, { status: 500 })
+  }
+}
+
 // DELETE /api/v2/empresa/lancamentos?id=X
 export async function DELETE(req: NextRequest) {
   try {
