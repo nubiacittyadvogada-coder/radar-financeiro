@@ -48,31 +48,28 @@ export async function GET(req: NextRequest) {
       include: { contaEmpresa: true },
     })
 
-    // Agrupa por empresa
-    const empresas = new Map<string, {
-      conta: any
-      semana: any[]
-      atrasadas: any[]
-    }>()
+    // Busca todas empresas com alerta ativo
+    const todasEmpresas = await prisma.contaEmpresa.findMany({
+      where: { alertaAtivo: true, telefoneAlerta: { not: null } },
+    })
 
-    for (const c of [...contasSemana, ...contasAtrasadas]) {
-      const key = c.contaEmpresaId
-      if (!empresas.has(key)) {
-        empresas.set(key, { conta: c.contaEmpresa, semana: [], atrasadas: [] })
-      }
-    }
+    // Agrupa contas por empresa
+    const semanaMap = new Map<string, any[]>()
+    const atrasadasMap = new Map<string, any[]>()
     for (const c of contasSemana) {
-      empresas.get(c.contaEmpresaId)?.semana.push(c)
+      if (!semanaMap.has(c.contaEmpresaId)) semanaMap.set(c.contaEmpresaId, [])
+      semanaMap.get(c.contaEmpresaId)!.push(c)
     }
     for (const c of contasAtrasadas) {
-      empresas.get(c.contaEmpresaId)?.atrasadas.push(c)
+      if (!atrasadasMap.has(c.contaEmpresaId)) atrasadasMap.set(c.contaEmpresaId, [])
+      atrasadasMap.get(c.contaEmpresaId)!.push(c)
     }
 
     let totalEnviados = 0
 
-    for (const [, { conta, semana, atrasadas }] of empresas) {
-      if (!conta.alertaAtivo || !conta.telefoneAlerta) continue
-      if (semana.length === 0 && atrasadas.length === 0) continue
+    for (const conta of todasEmpresas) {
+      const semana = semanaMap.get(conta.id) || []
+      const atrasadas = atrasadasMap.get(conta.id) || []
 
       const totalSemana = semana.reduce((s: number, c: any) => s + Number(c.valor), 0)
       const totalAtrasadas = atrasadas.reduce((s: number, c: any) => s + Number(c.valor), 0)
@@ -92,6 +89,10 @@ export async function GET(req: NextRequest) {
         mensagem += semana.map((c: any) =>
           `• ${dataBR(new Date(c.vencimento))} — ${c.descricao} — ${fmt(c.valor)}`
         ).join('\n')
+      }
+
+      if (semana.length === 0 && atrasadas.length === 0) {
+        mensagem += `\n\n✅ Nenhuma conta a pagar vencendo esta semana. Tudo em dia!`
       }
 
       mensagem += '\n\nAcesse o sistema para gerenciar seus pagamentos.'
