@@ -1,7 +1,9 @@
 /**
  * POST /api/v2/empresa/devedores/sincronizar-asaas
- * Verifica no Asaas o status atual de todas as cobranças com asaasPaymentId.
- * Marca como 'pago' no Radar as que foram pagas no Asaas.
+ * Sincroniza status de cobranças com o Asaas:
+ * - RECEIVED/CONFIRMED → marca como 'pago'
+ * - DELETED/CANCELLED ou não encontrado → marca como 'cancelado'
+ * - Devedores sem nenhuma cobrança pendente → marca ativo=false
  */
 
 import { NextRequest } from 'next/server'
@@ -32,14 +34,16 @@ export async function POST(req: NextRequest) {
         asaasPaymentId: { not: null },
         clienteDevedor: { contaEmpresaId: conta.id },
       },
-      select: { id: true, asaasPaymentId: true, valor: true },
+      select: { id: true, asaasPaymentId: true, valor: true, clienteDevedorId: true },
     })
 
-    let atualizadas = 0
+    let pagas = 0
+    let canceladas = 0
 
     for (const cobranca of cobrancas) {
       try {
         const pagamento = await asaas.buscarCobranca(cobranca.asaasPaymentId!)
+
         if (pagamento.status === 'RECEIVED' || pagamento.status === 'CONFIRMED') {
           await prisma.cobrancaDevedor.update({
             where: { id: cobranca.id },
@@ -49,40 +53,65 @@ export async function POST(req: NextRequest) {
               valorPago: pagamento.value || cobranca.valor,
             },
           })
-          atualizadas++
+          pagas++
+        } else if (pagamento.status === 'DELETED' || pagamento.status === 'REFUNDED' || pagamento.deleted === true) {
+          await prisma.cobrancaDevedor.update({
+            where: { id: cobranca.id },
+            data: { status: 'cancelado' },
+          })
+          canceladas++
         }
       } catch {
-        // Continua para a próxima cobrança se falhar em uma
+        // Se a API retornar 404 ou erro, a cobrança foi excluída no Asaas
+        await prisma.cobrancaDevedor.update({
+          where: { id: cobranca.id },
+          data: { status: 'cancelado' },
+        }).catch(() => {})
+        canceladas++
       }
     }
 
-    // Recalcula totalDevido e totalPago de todos os devedores afetados
-    if (atualizadas > 0) {
-      const devedores = await prisma.clienteDevedor.findMany({
-        where: { contaEmpresaId: conta.id },
-        include: { cobrancas: true },
+    // Recalcula totais e desativa devedores sem cobranças pendentes
+    const devedores = await prisma.clienteDevedor.findMany({
+      where: { contaEmpresaId: conta.id },
+      include: { cobrancas: true },
+    })
+
+    let desativados = 0
+    for (const d of devedores) {
+      const totalDevido = d.cobrancas
+        .filter(c => c.status === 'pendente')
+        .reduce((s, c) => s + Number(c.valor), 0)
+      const totalPago = d.cobrancas
+        .filter(c => c.status === 'pago')
+        .reduce((s, c) => s + Number(c.valorPago || c.valor), 0)
+      const temPendente = d.cobrancas.some(c => c.status === 'pendente')
+
+      await prisma.clienteDevedor.update({
+        where: { id: d.id },
+        data: {
+          totalDevido,
+          totalPago,
+          ativo: temPendente,
+        },
       })
-      for (const d of devedores) {
-        const totalDevido = d.cobrancas
-          .filter(c => c.status === 'pendente')
-          .reduce((s, c) => s + Number(c.valor), 0)
-        const totalPago = d.cobrancas
-          .filter(c => c.status === 'pago')
-          .reduce((s, c) => s + Number(c.valorPago || c.valor), 0)
-        await prisma.clienteDevedor.update({
-          where: { id: d.id },
-          data: { totalDevido, totalPago },
-        })
-      }
+      if (!temPendente && d.ativo) desativados++
     }
+
+    const partes = []
+    if (pagas > 0) partes.push(`${pagas} paga(s)`)
+    if (canceladas > 0) partes.push(`${canceladas} excluída(s) do Asaas`)
+    if (desativados > 0) partes.push(`${desativados} devedor(es) quitado(s)`)
 
     return Response.json({
       ok: true,
       verificadas: cobrancas.length,
-      atualizadas,
-      mensagem: atualizadas > 0
-        ? `${atualizadas} cobrança(s) marcada(s) como paga.`
-        : 'Nenhuma cobrança nova paga encontrada.',
+      pagas,
+      canceladas,
+      desativados,
+      mensagem: partes.length > 0
+        ? `Sincronizado: ${partes.join(', ')}.`
+        : 'Tudo já estava atualizado.',
     })
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })
