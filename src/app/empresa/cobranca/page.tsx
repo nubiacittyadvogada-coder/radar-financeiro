@@ -52,6 +52,8 @@ export default function CobrancaPage() {
   const [importandoConfirm, setImportandoConfirm] = useState(false)
   const [acordosPendentes, setAcordosPendentes] = useState<any[]>([])
   const [decidindo, setDecidindo] = useState<string | null>(null)
+  const [busca, setBusca] = useState('')
+  const [sincronizando, setSincronizando] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -92,6 +94,25 @@ export default function CobrancaPage() {
       alert('Erro: ' + err.message)
     } finally {
       setDecidindo(null)
+    }
+  }
+
+  async function sincronizarAsaas() {
+    if (!token) return
+    setSincronizando(true)
+    try {
+      const res = await fetch('/api/v2/empresa/devedores/sincronizar-asaas', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      alert(`✅ ${data.mensagem}`)
+      carregarDevedores(token)
+    } catch (err: any) {
+      alert('Erro: ' + err.message)
+    } finally {
+      setSincronizando(false)
     }
   }
 
@@ -209,6 +230,11 @@ export default function CobrancaPage() {
   }
 
   const totalInadimplente = devedores.reduce((s, d) => s + Number(d.totalDevido), 0)
+  const devedoresFiltrados = devedores.filter(d =>
+    !busca || d.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    (d.cpfCnpj || '').includes(busca) ||
+    (d.telefone || '').includes(busca)
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -219,11 +245,25 @@ export default function CobrancaPage() {
             {devedores.length} devedor(es) — Total: {formatarMoeda(totalInadimplente)}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="text"
+            placeholder="🔍 Buscar devedor..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-48"
+          />
+          <button
+            onClick={sincronizarAsaas}
+            disabled={sincronizando}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-60"
+          >
+            {sincronizando ? '⏳ Verificando...' : '✅ Sincronizar pagos'}
+          </button>
           <button
             onClick={buscarDoAsaas}
             disabled={importando}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
           >
             {importando ? '⏳ Buscando...' : '🔄 Importar do Asaas'}
           </button>
@@ -231,7 +271,7 @@ export default function CobrancaPage() {
             onClick={() => setShowForm(true)}
             className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
           >
-            + Cadastrar devedor
+            + Cadastrar
           </button>
         </div>
       </header>
@@ -473,9 +513,13 @@ export default function CobrancaPage() {
             <p className="text-gray-500">Nenhum devedor cadastrado.</p>
             <p className="text-sm text-gray-400 mt-2">Cadastre devedores para ativar a régua de cobrança automática.</p>
           </div>
+        ) : devedoresFiltrados.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            Nenhum devedor encontrado para "{busca}"
+          </div>
         ) : (
           <div className="space-y-4">
-            {devedores.map((d) => {
+            {devedoresFiltrados.map((d) => {
               const perfil = PERFIL_LABEL[d.perfilDevedor] || { label: d.perfilDevedor, color: 'bg-gray-100 text-gray-600' }
               const totalPendente = d.cobrancas.reduce((s, c) => s + Number(c.valor), 0)
               return (
