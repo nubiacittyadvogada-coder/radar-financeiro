@@ -32,13 +32,16 @@ export default function EmpresaImportarPage() {
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [preview, setPreview] = useState<PreviewImport | null>(null)
-  const [tipoImport, setTipoImport] = useState<'receitas' | 'despesas' | 'contas' | null>(null)
+  const [tipoImport, setTipoImport] = useState<'receitas' | 'despesas' | 'contas' | 'pdf' | null>(null)
   const [importando, setImportando] = useState(false)
   const [sucesso, setSucesso] = useState<string | null>(null)
+  const [previewPdf, setPreviewPdf] = useState<any | null>(null)
+  const [confirmandoPdf, setConfirmandoPdf] = useState(false)
 
   const receitasRef = useRef<HTMLInputElement>(null)
   const despesasRef = useRef<HTMLInputElement>(null)
   const contasRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -310,6 +313,99 @@ export default function EmpresaImportarPage() {
     }
   }
 
+  async function processarPdf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !token) return
+    setErro(''); setSucesso(null); setPreviewPdf(null); setLoading(true); setTipoImport('pdf')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/v2/empresa/importar-pdf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setPreviewPdf(data)
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setLoading(false)
+      if (pdfRef.current) pdfRef.current.value = ''
+    }
+  }
+
+  async function confirmarPdf() {
+    if (!previewPdf || !token) return
+    setConfirmandoPdf(true)
+    setErro('')
+    try {
+      const CATS_RECEITA: Record<string, { tipo: string; planoConta: string }> = {
+        honorario_inicial: { tipo: 'receita', planoConta: 'Honorários Iniciais' },
+        honorario_mensal: { tipo: 'receita', planoConta: 'Honorários Mensais' },
+        consulta: { tipo: 'receita', planoConta: 'Consultas' },
+        exito: { tipo: 'receita', planoConta: 'Honorário de Êxito' },
+        multa_cancelamento: { tipo: 'receita', planoConta: 'Multa Cancelamento' },
+        outros_receita: { tipo: 'receita', planoConta: 'Outros Recebimentos' },
+      }
+      const CATS_DESPESA: Record<string, { tipo: string; planoConta: string }> = {
+        pessoal: { tipo: 'pessoal', planoConta: 'Despesas com Pessoal' },
+        aluguel: { tipo: 'geral', planoConta: 'Aluguel' },
+        marketing: { tipo: 'marketing', planoConta: 'Marketing' },
+        servicos: { tipo: 'custo_direto', planoConta: 'Serviços Terceiros' },
+        software: { tipo: 'geral', planoConta: 'Softwares e Sistemas' },
+        impostos: { tipo: 'imposto', planoConta: 'Impostos e Taxas' },
+        retirada: { tipo: 'retirada', planoConta: 'Retirada de Sócios' },
+        outras_despesas: { tipo: 'geral', planoConta: 'Despesas Gerais' },
+      }
+
+      // Monta lançamentos agrupados por mês
+      const porMes: Record<string, any[]> = {}
+      for (const t of previewPdf.transacoes) {
+        const data = new Date(t.data)
+        const mes = data.getMonth() + 1
+        const ano = data.getFullYear()
+        const k = `${mes}-${ano}`
+        if (!porMes[k]) porMes[k] = []
+        const isReceita = t.tipo === 'receita'
+        const cat = isReceita ? (CATS_RECEITA[t.categoria] || CATS_RECEITA.outros_receita) : (CATS_DESPESA[t.categoria] || CATS_DESPESA.outras_despesas)
+        porMes[k].push({
+          tipo: cat.tipo,
+          subtipo: isReceita ? t.categoria : null,
+          planoConta: cat.planoConta,
+          grupoConta: isReceita ? 'Receitas' : 'Despesas',
+          favorecido: t.descricao,
+          descricao: t.descricao,
+          valor: Number(t.valor),
+          data: t.data,
+          pago: true,
+          mes, ano,
+        })
+      }
+
+      let totalImportado = 0
+      for (const [k, lans] of Object.entries(porMes)) {
+        const [mes, ano] = k.split('-').map(Number)
+        const res = await fetch('/api/v2/empresa/importar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ lancamentos: lans, mes, ano, tipo: 'extrato_pdf', nomeArquivo: `extrato_${previewPdf.banco}_${previewPdf.periodo}` }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.erro)
+        totalImportado += data.total || lans.length
+      }
+
+      setPreviewPdf(null)
+      setSucesso(`${totalImportado} lançamentos do extrato importados!`)
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setConfirmandoPdf(false)
+    }
+  }
+
   function gerarPreview(lancamentos: any[], tipo: string) {
     const por_mes: Record<string, number> = {}
     lancamentos.forEach(l => {
@@ -412,6 +508,43 @@ export default function EmpresaImportarPage() {
           </div>
         )}
 
+        {/* Preview PDF */}
+        {previewPdf && (
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+            <h2 className="font-semibold text-gray-900 mb-1">
+              📄 Extrato {previewPdf.banco} — {previewPdf.periodo}
+            </h2>
+            <p className="text-sm text-gray-500 mb-1">{previewPdf.transacoes.length} transações identificadas</p>
+            {previewPdf.observacoes && <p className="text-xs text-gray-400 mb-3 italic">{previewPdf.observacoes}</p>}
+            <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border rounded-lg p-2">
+              {previewPdf.transacoes.map((t: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-xs py-1 border-b last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={t.tipo === 'receita' ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>
+                      {t.tipo === 'receita' ? '↑' : '↓'}
+                    </span>
+                    <span className="truncate text-gray-700">{t.descricao}</span>
+                    <span className="text-gray-400 shrink-0">{t.data?.slice(0, 10)}</span>
+                  </div>
+                  <span className={`font-semibold shrink-0 ml-2 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-500'}`}>
+                    R$ {Number(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setPreviewPdf(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>
+              <button
+                onClick={confirmarPdf}
+                disabled={confirmandoPdf}
+                className="px-5 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+              >
+                {confirmandoPdf ? 'Importando...' : `✅ Importar ${previewPdf.transacoes.length} transações`}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Cards de importação */}
         <div className="grid md:grid-cols-3 gap-4">
           {/* Receitas */}
@@ -463,6 +596,27 @@ export default function EmpresaImportarPage() {
               {loading && tipoImport === 'contas' ? 'Lendo...' : '📂 Contas a Pagar.xlsx'}
             </button>
             <input ref={contasRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={processarContas} />
+          </div>
+        </div>
+
+        {/* Extrato PDF */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-purple-100">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl">🏦</div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-gray-900">Extrato Bancário (PDF)</h2>
+              <p className="text-xs text-gray-500 mt-1 mb-4">
+                A IA lê o PDF do seu banco e extrai automaticamente receitas e despesas. Funciona com qualquer banco: Sicredi, Itaú, Bradesco, BB, Nubank, etc.
+              </p>
+              <button
+                onClick={() => pdfRef.current?.click()}
+                disabled={loading}
+                className="px-5 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading && tipoImport === 'pdf' ? '⏳ Analisando PDF...' : '📄 Importar Extrato PDF'}
+              </button>
+              <input ref={pdfRef} type="file" accept=".pdf" className="hidden" onChange={processarPdf} />
+            </div>
           </div>
         </div>
 
