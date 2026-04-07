@@ -42,6 +42,7 @@ export default function EmpresaDashboard() {
   const [mes, setMes] = useState(() => Number(searchParams.get('mes') || new Date().getMonth() + 1))
   const [ano, setAno] = useState(() => Number(searchParams.get('ano') || new Date().getFullYear()))
   const [loading, setLoading] = useState(true)
+  const [disparando, setDisparando] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -77,6 +78,23 @@ export default function EmpresaDashboard() {
 
   useEffect(() => { carregarDados() }, [carregarDados])
 
+  async function dispararResumo() {
+    if (!token) return
+    setDisparando(true)
+    try {
+      const res = await fetch('/api/cron/resumo-semanal', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      alert(`✅ Resumo enviado! ${data.empresasNotificadas} empresa(s) notificada(s).`)
+    } catch (err: any) {
+      alert('Erro ao disparar: ' + err.message)
+    } finally {
+      setDisparando(false)
+    }
+  }
+
   const f = fechamento
   const graficoHistorico = historico.map((h: any) => ({
     mes: `${MESES[h.mes]}/${String(h.ano).slice(2)}`,
@@ -101,6 +119,15 @@ export default function EmpresaDashboard() {
           <h1 className="text-xl font-bold text-gray-900">Dashboard Empresa</h1>
           {usuario && <p className="text-sm text-gray-500">{usuario.nome}</p>}
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={dispararResumo}
+            disabled={disparando}
+            title="Envia o resumo semanal agora via WhatsApp"
+            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+          >
+            {disparando ? '⏳' : '📲 Resumo agora'}
+          </button>
         <select
           value={`${mes}-${ano}`}
           onChange={(e) => { const [m, a] = e.target.value.split('-'); setMes(+m); setAno(+a) }}
@@ -112,6 +139,7 @@ export default function EmpresaDashboard() {
             ))
           )}
         </select>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
