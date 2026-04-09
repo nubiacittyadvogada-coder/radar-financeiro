@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Deduplicação: evita inserir lançamentos já existentes (mesmo data + valor + descrição)
+    // ── Deduplicação: evita inserir lançamentos já existentes ──────────────────
     const jaExistentes = await prisma.lancamentoEmpresa.findMany({
       where: { contaEmpresaId: conta.id, mes: Number(mes), ano: Number(ano) },
       select: { dataCompetencia: true, valor: true, descricao: true },
@@ -97,6 +97,84 @@ export async function POST(req: NextRequest) {
       const chave = `${d.dataCompetencia?.toISOString().slice(0, 10)}|${Number(d.valor).toFixed(2)}|${(d.descricao || '').toLowerCase().trim()}`
       return !chaveExistente.has(chave)
     })
+
+    // ── Conciliação com Contas a Pagar ─────────────────────────────────────────
+    // Para cada despesa do extrato PDF, verifica se existe uma conta a pagar
+    // com valor próximo (±5%) e vencimento próximo (±7 dias).
+    // Se sim, marca a conta como paga em vez de criar lançamento duplicado.
+    let conciliados = 0
+    const isPdfImport = tipo === 'extrato_pdf'
+
+    if (isPdfImport) {
+      // Busca contas a pagar pendentes/atrasadas do mesmo período (±1 mês)
+      const inicioJanela = new Date(Number(ano), Number(mes) - 2, 1)
+      const fimJanela = new Date(Number(ano), Number(mes) + 1, 0)
+      const contasAbertas = await prisma.contaPagarEmpresa.findMany({
+        where: {
+          contaEmpresaId: conta.id,
+          status: { in: ['pendente', 'atrasado'] },
+          vencimento: { gte: inicioJanela, lte: fimJanela },
+        },
+      })
+
+      const contasPagasIds: string[] = []
+
+      // Para cada despesa filtrada, tenta reconciliar com conta a pagar
+      const dadosParaInserir: typeof dadosFiltrados = []
+      for (const d of dadosFiltrados) {
+        if (d.tipo === 'receita') {
+          dadosParaInserir.push(d)
+          continue
+        }
+        const valorD = Number(d.valor)
+        const dataD = d.dataCompetencia
+
+        // Procura conta a pagar que bate (valor ±5%, data ±7 dias)
+        const match = contasAbertas.find(c => {
+          const valorC = Number(c.valor)
+          const diffValor = Math.abs(valorC - valorD) / valorC
+          if (diffValor > 0.05) return false
+          if (!dataD) return false
+          const diffDias = Math.abs(new Date(c.vencimento).getTime() - dataD.getTime()) / 86400000
+          return diffDias <= 7
+        })
+
+        if (match && !contasPagasIds.includes(match.id)) {
+          // Reconcilia: marca conta a pagar como paga, não cria lançamento duplicado
+          contasPagasIds.push(match.id)
+          conciliados++
+        } else {
+          // Sem correspondência: cria lançamento normalmente
+          dadosParaInserir.push(d)
+        }
+      }
+
+      // Atualiza contas a pagar reconciliadas
+      if (contasPagasIds.length > 0) {
+        await prisma.contaPagarEmpresa.updateMany({
+          where: { id: { in: contasPagasIds } },
+          data: { status: 'pago', pagoEm: new Date() },
+        })
+      }
+
+      if (dadosParaInserir.length > 0) {
+        await prisma.lancamentoEmpresa.createMany({ data: dadosParaInserir })
+      }
+      await prisma.importacaoEmpresa.update({
+        where: { id: importacao.id },
+        data: { status: 'concluido', linhasProcessadas: dadosParaInserir.length + conciliados },
+      })
+
+      const fechamento = await calcularFechamentoEmpresa(conta.id, Number(mes), Number(ano))
+      return Response.json({
+        ok: true,
+        total: dadosParaInserir.length,
+        inseridos: dadosParaInserir.length,
+        duplicatas: dados.length - dadosFiltrados.length,
+        conciliados,
+        fechamento,
+      }, { status: 201 })
+    }
 
     if (dadosFiltrados.length > 0) {
       await prisma.lancamentoEmpresa.createMany({ data: dadosFiltrados })
