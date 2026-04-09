@@ -97,13 +97,14 @@ export async function GET(req: NextRequest) {
 
       mensagem += '\n\nAcesse o sistema para gerenciar seus pagamentos.'
 
+      const telefone = conta.telefoneAlerta!
       let enviado = false
       if (conta.zapiInstanceId && conta.zapiToken && conta.zapiClientToken) {
         const zapi = new ZApiClient(conta.zapiInstanceId, conta.zapiToken, conta.zapiClientToken)
-        enviado = await zapi.enviarTexto(conta.telefoneAlerta, mensagem)
+        enviado = await zapi.enviarTexto(telefone, mensagem)
       }
       if (!enviado) {
-        enviado = await enviarWhatsAppSistema(conta.telefoneAlerta, mensagem)
+        enviado = await enviarWhatsAppSistema(telefone, mensagem)
       }
 
       if (enviado) {
