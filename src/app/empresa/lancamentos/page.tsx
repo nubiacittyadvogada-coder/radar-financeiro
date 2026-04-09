@@ -51,6 +51,7 @@ export default function EmpresaLancamentosPage() {
   const [modal, setModal] = useState<'receita' | 'despesa' | null>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [limpando, setLimpando] = useState(false)
 
   const [form, setForm] = useState({
     categoria: '',
@@ -71,6 +72,27 @@ export default function EmpresaLancamentosPage() {
     if (parsed.tipo !== 'usuario') { router.push('/login'); return }
     setToken(t)
   }, [router])
+
+  async function limparDuplicatas() {
+    if (!token) return
+    if (!confirm('Remover lançamentos importados que têm correspondente manual (mesmo valor/data)?')) return
+    setLimpando(true)
+    try {
+      const res = await fetch('/api/v2/empresa/lancamentos/limpar-duplicatas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mes, ano }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      alert(`Limpeza concluída: ${data.deletados} duplicata(s) removida(s), ${data.marcadosPago} marcado(s) como pago.`)
+      carregar()
+    } catch (err: any) {
+      alert('Erro: ' + err.message)
+    } finally {
+      setLimpando(false)
+    }
+  }
 
   const carregar = useCallback(async () => {
     if (!token) return
@@ -201,6 +223,9 @@ export default function EmpresaLancamentosPage() {
           </div>
           {/* Botões */}
           <div className="flex gap-2">
+            <button onClick={limparDuplicatas} disabled={limpando} className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">
+              {limpando ? '⏳' : '🧹'} Limpar duplicatas
+            </button>
             <button onClick={() => abrirModal('receita')} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
               <span>+</span> Receita
             </button>
