@@ -7,7 +7,7 @@ import { calcularFechamentoEmpresa } from '@/server/lib/calcularFechamentoEmpres
 export const maxDuration = 60
 
 // POST /api/v2/empresa/importar
-// Recebe lancamentos[] já parseados pelo frontend (xlsx), classifica e salva
+// Recebe lancamentos[] já parseados pelo frontend (xlsx ou pdf), classifica e salva
 export async function POST(req: NextRequest) {
   try {
     const u = getUsuario(req)
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { lancamentos, mes, ano, tipo, nomeArquivo } = body
+    const isPdfImport = tipo === 'extrato_pdf'
 
     if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
       return Response.json({ erro: 'lancamentos[] obrigatório' }, { status: 400 })
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Classifica e insere lançamentos
+    // Classifica lançamentos
     const dados = lancamentos.map((l: any) => {
       // Se o frontend já enviou tipo/grupoConta (ex: importação PDF), usa direto.
       // Só chama o classificador para planilhas Excel que usam código P.CONTAS.
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
         dataCompetencia: dataComp,
         valor: Number(l.valor),
         dataVencimento: l.dataVencimento ? new Date(l.dataVencimento) : null,
-        statusPg: l.statusPg ? String(l.statusPg).trim() : (l.pago ? 'OK PG' : null),
+        statusPg: l.pago ? 'pago' : (l.statusPg === 'OK PG' || l.statusPg === 'pago' ? 'pago' : 'pendente'),
         dataPagamento: l.dataPagamento ? new Date(l.dataPagamento) : null,
         formaPagamento: l.formaPagamento ? String(l.formaPagamento).trim() : null,
         banco: l.banco ? String(l.banco).trim() : null,
@@ -83,30 +84,58 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // ── Deduplicação: evita inserir lançamentos já existentes ──────────────────
+    // ── Busca lançamentos já existentes no mesmo mês/ano ───────────────────────
     const jaExistentes = await prisma.lancamentoEmpresa.findMany({
       where: { contaEmpresaId: conta.id, mes: Number(mes), ano: Number(ano) },
-      select: { dataCompetencia: true, valor: true, descricao: true },
+      select: { id: true, dataCompetencia: true, valor: true, descricao: true, statusPg: true },
     })
-    const chaveExistente = new Set(
-      jaExistentes.map(e =>
-        `${e.dataCompetencia?.toISOString().slice(0, 10)}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').toLowerCase().trim()}`
-      )
-    )
+
+    // ids de lançamentos existentes a marcar como pago (conciliação manual ↔ PDF)
+    const conciliadosManualIds: string[] = []
+
     const dadosFiltrados = dados.filter(d => {
-      const chave = `${d.dataCompetencia?.toISOString().slice(0, 10)}|${Number(d.valor).toFixed(2)}|${(d.descricao || '').toLowerCase().trim()}`
-      return !chaveExistente.has(chave)
+      // 1) Dedup exato por data+valor+descrição (evita importar mesmo PDF duas vezes)
+      const chaveExata = `${d.dataCompetencia?.toISOString().slice(0, 10)}|${Number(d.valor).toFixed(2)}|${(d.descricao || '').toLowerCase().trim()}`
+      const duplicataExata = jaExistentes.some(e =>
+        `${e.dataCompetencia?.toISOString().slice(0, 10)}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').toLowerCase().trim()}` === chaveExata
+      )
+      if (duplicataExata) return false
+
+      // 2) Para PDF: conciliação por valor+data contra lançamentos já existentes
+      //    (ex: lançamento manual "Flash R$1800" == "PAGAMENTO PIX - FLASH APP R$1800")
+      if (isPdfImport && d.dataCompetencia) {
+        const valorD = Number(d.valor)
+        const match = jaExistentes.find(e => {
+          if (!e.dataCompetencia || conciliadosManualIds.includes(e.id)) return false
+          const diffValor = Math.abs(Number(e.valor) - valorD) / (valorD || 1)
+          if (diffValor > 0.05) return false
+          const diffDias = Math.abs(new Date(e.dataCompetencia).getTime() - d.dataCompetencia!.getTime()) / 86400000
+          return diffDias <= 7
+        })
+        if (match) {
+          conciliadosManualIds.push(match.id) // marca para pago
+          return false // não cria novo lançamento
+        }
+      }
+
+      return true
     })
+
+    // Marca lançamentos manuais conciliados como pagos
+    if (conciliadosManualIds.length > 0) {
+      await prisma.lancamentoEmpresa.updateMany({
+        where: { id: { in: conciliadosManualIds } },
+        data: { statusPg: 'pago', dataPagamento: new Date() },
+      })
+    }
 
     // ── Conciliação com Contas a Pagar ─────────────────────────────────────────
-    // Para cada despesa do extrato PDF, verifica se existe uma conta a pagar
-    // com valor próximo (±5%) e vencimento próximo (±7 dias).
-    // Se sim, marca a conta como paga em vez de criar lançamento duplicado.
-    let conciliados = 0
-    const isPdfImport = tipo === 'extrato_pdf'
+    // Para despesas do PDF sem lançamento manual correspondente,
+    // verifica se existe uma conta a pagar que bata (valor ±5%, data ±7 dias).
+    // Se sim, marca conta como paga e não cria lançamento duplicado.
+    let conciliadosContasPagar = 0
 
     if (isPdfImport) {
-      // Busca contas a pagar pendentes/atrasadas do mesmo período (±1 mês)
       const inicioJanela = new Date(Number(ano), Number(mes) - 2, 1)
       const fimJanela = new Date(Number(ano), Number(mes) + 1, 0)
       const contasAbertas = await prisma.contaPagarEmpresa.findMany({
@@ -118,9 +147,8 @@ export async function POST(req: NextRequest) {
       })
 
       const contasPagasIds: string[] = []
-
-      // Para cada despesa filtrada, tenta reconciliar com conta a pagar
       const dadosParaInserir: typeof dadosFiltrados = []
+
       for (const d of dadosFiltrados) {
         if (d.tipo === 'receita') {
           dadosParaInserir.push(d)
@@ -129,22 +157,22 @@ export async function POST(req: NextRequest) {
         const valorD = Number(d.valor)
         const dataD = d.dataCompetencia
 
-        // Procura conta a pagar que bate (valor ±5%, data ±7 dias)
         const match = contasAbertas.find(c => {
+          if (contasPagasIds.includes(c.id)) return false
           const valorC = Number(c.valor)
-          const diffValor = Math.abs(valorC - valorD) / valorC
+          const diffValor = Math.abs(valorC - valorD) / (valorC || 1)
           if (diffValor > 0.05) return false
           if (!dataD) return false
           const diffDias = Math.abs(new Date(c.vencimento).getTime() - dataD.getTime()) / 86400000
           return diffDias <= 7
         })
 
-        if (match && !contasPagasIds.includes(match.id)) {
-          // Reconcilia: marca conta a pagar como paga, não cria lançamento duplicado
+        if (match) {
           contasPagasIds.push(match.id)
-          conciliados++
+          conciliadosContasPagar++
+          // Cria lançamento mesmo assim para o DRE registrar a despesa
+          dadosParaInserir.push(d)
         } else {
-          // Sem correspondência: cria lançamento normalmente
           dadosParaInserir.push(d)
         }
       }
@@ -162,32 +190,38 @@ export async function POST(req: NextRequest) {
       }
       await prisma.importacaoEmpresa.update({
         where: { id: importacao.id },
-        data: { status: 'concluido', linhasProcessadas: dadosParaInserir.length + conciliados },
+        data: { status: 'concluido', linhasProcessadas: dadosParaInserir.length + conciliadosManualIds.length },
       })
 
       const fechamento = await calcularFechamentoEmpresa(conta.id, Number(mes), Number(ano))
       return Response.json({
         ok: true,
-        total: dadosParaInserir.length,
         inseridos: dadosParaInserir.length,
+        total: dadosParaInserir.length,
         duplicatas: dados.length - dadosFiltrados.length,
-        conciliados,
+        conciliadosManual: conciliadosManualIds.length,
+        conciliadosContasPagar,
         fechamento,
       }, { status: 201 })
     }
 
+    // Fluxo Excel (não-PDF)
     if (dadosFiltrados.length > 0) {
       await prisma.lancamentoEmpresa.createMany({ data: dadosFiltrados })
     }
     await prisma.importacaoEmpresa.update({
       where: { id: importacao.id },
-      data: { status: 'concluido', linhasProcessadas: dados.length },
+      data: { status: 'concluido', linhasProcessadas: dadosFiltrados.length },
     })
 
-    // Recalcula fechamento
     const fechamento = await calcularFechamentoEmpresa(conta.id, Number(mes), Number(ano))
-
-    return Response.json({ ok: true, total: dadosFiltrados.length, inseridos: dadosFiltrados.length, duplicatas: dados.length - dadosFiltrados.length, fechamento }, { status: 201 })
+    return Response.json({
+      ok: true,
+      total: dadosFiltrados.length,
+      inseridos: dadosFiltrados.length,
+      duplicatas: dados.length - dadosFiltrados.length,
+      fechamento,
+    }, { status: 201 })
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })
   }

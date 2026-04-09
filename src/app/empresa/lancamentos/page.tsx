@@ -103,7 +103,7 @@ export default function EmpresaLancamentosPage() {
       descricao: l.descricao || '',
       valor: String(Math.abs(Number(l.valor))),
       data: l.dataCompetencia ? l.dataCompetencia.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      pago: l.statusPg === 'pago',
+      pago: l.statusPg === 'pago' || l.statusPg === 'OK PG',
       formaPagamento: '',
       observacoes: '',
     })
@@ -404,7 +404,7 @@ export default function EmpresaLancamentosPage() {
 function LancamentoRow({ l, onEdit, onDelete }: { l: Lancamento; onEdit: () => void; onDelete: () => void }) {
   const isReceita = l.tipo === 'receita'
   const data = l.dataCompetencia ? new Date(l.dataCompetencia).toLocaleDateString('pt-BR') : '—'
-  const pago = l.statusPg === 'pago'
+  const pago = l.statusPg === 'pago' || l.statusPg === 'OK PG'
 
   return (
     <div className="px-4 py-3 flex items-center gap-3 border-b last:border-b-0 hover:bg-gray-50">

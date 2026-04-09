@@ -398,12 +398,12 @@ export default function EmpresaImportarPage() {
         if (!res.ok) throw new Error(data.erro)
         totalImportado += data.inseridos ?? data.total ?? lans.length
         totalDuplicatas += data.duplicatas ?? 0
-        totalConciliados += data.conciliados ?? 0
+        totalConciliados += (data.conciliadosManual ?? 0) + (data.conciliadosContasPagar ?? 0)
       }
 
       setPreviewPdf(null)
       const partes = [`${totalImportado} lançamentos importados`]
-      if (totalConciliados > 0) partes.push(`${totalConciliados} conta(s) a pagar conciliada(s)`)
+      if (totalConciliados > 0) partes.push(`${totalConciliados} conciliado(s) como pago`)
       if (totalDuplicatas > 0) partes.push(`${totalDuplicatas} duplicata(s) ignorada(s)`)
       setSucesso(partes.join(' · ') + '!')
     } catch (err: any) {
