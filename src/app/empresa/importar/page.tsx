@@ -385,6 +385,7 @@ export default function EmpresaImportarPage() {
       }
 
       let totalImportado = 0
+      let totalDuplicatas = 0
       for (const [k, lans] of Object.entries(porMes)) {
         const [mes, ano] = k.split('-').map(Number)
         const res = await fetch('/api/v2/empresa/importar', {
@@ -394,11 +395,13 @@ export default function EmpresaImportarPage() {
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.erro)
-        totalImportado += data.total || lans.length
+        totalImportado += data.inseridos ?? data.total ?? lans.length
+        totalDuplicatas += data.duplicatas ?? 0
       }
 
       setPreviewPdf(null)
-      setSucesso(`${totalImportado} lançamentos do extrato importados!`)
+      const msgDup = totalDuplicatas > 0 ? ` (${totalDuplicatas} duplicatas ignoradas)` : ''
+      setSucesso(`${totalImportado} lançamentos importados${msgDup}!`)
     } catch (err: any) {
       setErro(err.message)
     } finally {
