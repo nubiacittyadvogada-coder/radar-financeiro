@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 - Extraia receitas (créditos/entradas) e despesas (débitos/saídas)
 - Ignore: saldo inicial, saldo final, linhas de saldo/resumo
 - Ignore transferências internas entre contas da mesma empresa
+- IGNORE pagamentos de fatura de cartão de crédito: SICREDI DEBITO MASTER / DEB MASTER / DEBITO MASTER / PAGTO FATURA / DEB.CTA.FATURA / PAGAMENTO CARTAO / FAT CARTAO / DEBITO FATURA — essas entradas representam o pagamento da fatura, não despesas individuais (já contadas nas compras do cartão)
 
 ═══ CATEGORIAS PARA RECEITAS ═══
 honorario_inicial | honorario_mensal | consulta | exito | multa_cancelamento | outros_receita
