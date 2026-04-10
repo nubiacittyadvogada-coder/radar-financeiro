@@ -14,6 +14,7 @@ export default function EmpresaConfiguracoesPage() {
   const [erro, setErro] = useState('')
   const [testando, setTestando] = useState(false)
   const [testeMsg, setTesteMsg] = useState('')
+  const [configurandoWebhook, setConfigurandoWebhook] = useState(false)
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [formFunc, setFormFunc] = useState({ nome: '', email: '', senha: '' })
   const [salvandoFunc, setSalvandoFunc] = useState(false)
@@ -111,6 +112,25 @@ export default function EmpresaConfiguracoesPage() {
       setTesteMsg('❌ ' + err.message)
     } finally {
       setTestando(false)
+    }
+  }
+
+  async function configurarWebhook() {
+    if (!token) return
+    setConfigurandoWebhook(true)
+    setTesteMsg('')
+    try {
+      const res = await fetch('/api/v2/empresa/configurar-webhook-zapi', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setTesteMsg('✅ Webhook ativado! A IA agora vai responder mensagens dos devedores automaticamente.')
+    } catch (err: any) {
+      setTesteMsg('❌ ' + err.message)
+    } finally {
+      setConfigurandoWebhook(false)
     }
   }
 
@@ -353,6 +373,13 @@ export default function EmpresaConfiguracoesPage() {
             className="flex-1 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50"
           >
             {testando ? 'Enviando...' : '📱 Testar WhatsApp'}
+          </button>
+          <button
+            onClick={configurarWebhook}
+            disabled={configurandoWebhook}
+            className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50"
+          >
+            {configurandoWebhook ? 'Configurando...' : '🤖 Ativar IA Cobrança'}
           </button>
           <button
             onClick={salvar}

@@ -39,6 +39,25 @@ export class ZApiClient {
   async enviarTemplate(telefone: string, mensagem: string): Promise<boolean> {
     return this.enviarTexto(telefone, mensagem)
   }
+
+  /**
+   * Configura a URL do webhook de recebimento de mensagens na Z-API.
+   */
+  async configurarWebhookRecebimento(webhookUrl: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/update-webhook-received`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Client-Token': this.clientToken,
+        },
+        body: JSON.stringify({ value: webhookUrl }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
 }
 
 /**

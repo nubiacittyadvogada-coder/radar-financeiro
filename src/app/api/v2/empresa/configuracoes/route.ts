@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import prisma from '@/server/lib/db'
+import { ZApiClient } from '@/lib/zapi'
 
 export async function GET(req: NextRequest) {
   try {
@@ -53,6 +54,24 @@ export async function PATCH(req: NextRequest) {
       where: { id: conta.id },
       data: update,
     })
+
+    // Auto-configura webhook de recebimento na Z-API quando credenciais são salvas
+    const instanceId = update.zapiInstanceId || atualizada.zapiInstanceId
+    const token = update.zapiToken || atualizada.zapiToken
+    const clientToken = update.zapiClientToken || atualizada.zapiClientToken
+
+    if (instanceId && token && clientToken && (update.zapiInstanceId || update.zapiToken || update.zapiClientToken)) {
+      try {
+        const zapi = new ZApiClient(instanceId, token, clientToken)
+        const host = req.headers.get('host') || 'radar-financeiro-roan.vercel.app'
+        const protocol = host.includes('localhost') ? 'http' : 'https'
+        const webhookUrl = `${protocol}://${host}/api/v2/webhook/zapi`
+        const ok = await zapi.configurarWebhookRecebimento(webhookUrl)
+        console.log(`[Config] Webhook Z-API configurado: ${ok ? 'OK' : 'FALHOU'} → ${webhookUrl}`)
+      } catch (err: any) {
+        console.error('[Config] Erro ao configurar webhook Z-API:', err.message)
+      }
+    }
 
     return Response.json({ ok: true, nomeEmpresa: atualizada.nomeEmpresa, alertaAtivo: atualizada.alertaAtivo })
   } catch (err: any) {
