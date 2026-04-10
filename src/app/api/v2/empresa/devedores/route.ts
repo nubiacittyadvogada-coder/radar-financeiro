@@ -13,10 +13,34 @@ export async function GET(req: NextRequest) {
       where: { contaEmpresaId: conta.id, ativo: true },
       include: {
         cobrancas: { where: { status: 'pendente' }, orderBy: { vencimento: 'asc' } },
-        _count: { select: { mensagens: true } },
+        _count: { select: { mensagens: true, cobrancas: true } },
       },
       orderBy: { totalDevido: 'desc' },
     })
+
+    // Auto-atualiza perfil de cada devedor com base no histórico e dias em atraso
+    for (const d of devedores) {
+      const cobrancaMaisAntiga = d.cobrancas[0] // já ordenadas por vencimento asc
+      if (!cobrancaMaisAntiga) continue
+
+      const diasAtraso = Math.max(0, Math.floor(
+        (Date.now() - new Date(cobrancaMaisAntiga.vencimento).getTime()) / (1000 * 60 * 60 * 24)
+      ))
+      const total = d._count.cobrancas
+
+      let novoPerfil = 'primeiro_atraso'
+      if (total >= 5 || diasAtraso >= 90) novoPerfil = 'longo_prazo'
+      else if (total >= 3 || diasAtraso >= 60) novoPerfil = 'recorrente'
+      else if (total >= 2 || diasAtraso >= 30) novoPerfil = 'segundo_atraso'
+
+      if (novoPerfil !== d.perfilDevedor) {
+        await prisma.clienteDevedor.update({
+          where: { id: d.id },
+          data: { perfilDevedor: novoPerfil },
+        })
+        d.perfilDevedor = novoPerfil
+      }
+    }
 
     return Response.json(devedores)
   } catch (err: any) {
