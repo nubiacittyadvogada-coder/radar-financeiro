@@ -21,16 +21,24 @@ export async function POST(req: NextRequest) {
     }
 
     const zapi = new ZApiClient(conta.zapiInstanceId, conta.zapiToken, conta.zapiClientToken)
-    const host = req.headers.get('host') || 'radar-financeiro-roan.vercel.app'
-    const protocol = host.includes('localhost') ? 'http' : 'https'
-    const webhookUrl = `${protocol}://${host}/api/v2/webhook/zapi`
+    const webhookUrl = 'https://radar-financeiro-roan.vercel.app/api/v2/webhook/zapi'
 
-    const ok = await zapi.configurarWebhookRecebimento(webhookUrl)
+    const resultado = await zapi.configurarWebhookRecebimento(webhookUrl)
 
-    if (ok) {
-      return Response.json({ ok: true, webhookUrl, mensagem: 'Webhook configurado com sucesso!' })
+    if (resultado.ok) {
+      return Response.json({
+        ok: true,
+        webhookUrl,
+        mensagem: 'Webhook configurado com sucesso! A IA vai responder automaticamente.',
+        detalhes: resultado.detalhes,
+      })
     } else {
-      return Response.json({ erro: 'Falha ao configurar webhook na Z-API. Verifique as credenciais.' }, { status: 500 })
+      return Response.json({
+        ok: false,
+        webhookUrl,
+        erro: resultado.detalhes,
+        instrucoes: `Configure manualmente: no painel Z-API, vá em Webhooks → "On Message Received" → cole a URL: ${webhookUrl}`,
+      }, { status: 200 })
     }
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })

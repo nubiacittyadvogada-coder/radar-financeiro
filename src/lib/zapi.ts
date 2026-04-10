@@ -42,21 +42,36 @@ export class ZApiClient {
 
   /**
    * Configura a URL do webhook de recebimento de mensagens na Z-API.
+   * Tenta múltiplos endpoints e formatos da API.
    */
-  async configurarWebhookRecebimento(webhookUrl: string): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.baseUrl}/update-webhook-received`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Client-Token': this.clientToken,
-        },
-        body: JSON.stringify({ value: webhookUrl }),
-      })
-      return res.ok
-    } catch {
-      return false
+  async configurarWebhookRecebimento(webhookUrl: string): Promise<{ ok: boolean; detalhes: string }> {
+    const tentativas = [
+      { endpoint: '/update-webhook-received', method: 'PUT', body: { value: webhookUrl } },
+      { endpoint: '/update-webhook-received', method: 'PUT', body: { webhookUrl } },
+      { endpoint: '/webhook', method: 'PUT', body: { receivedUrl: webhookUrl } },
+    ]
+
+    for (const t of tentativas) {
+      try {
+        const res = await fetch(`${this.baseUrl}${t.endpoint}`, {
+          method: t.method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-Token': this.clientToken,
+          },
+          body: JSON.stringify(t.body),
+        })
+        const data = await res.json().catch(() => ({}))
+        console.log(`[Z-API] Webhook ${t.endpoint}: status=${res.status}`, JSON.stringify(data).substring(0, 200))
+        if (res.ok) {
+          return { ok: true, detalhes: `${t.endpoint} configurado com sucesso` }
+        }
+      } catch (err: any) {
+        console.error(`[Z-API] Webhook ${t.endpoint} falhou:`, err.message)
+      }
     }
+
+    return { ok: false, detalhes: 'Nenhum endpoint da Z-API aceitou a configuração. Configure manualmente no painel Z-API.' }
   }
 }
 

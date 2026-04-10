@@ -125,8 +125,11 @@ export default function EmpresaConfiguracoesPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.erro)
-      setTesteMsg('✅ Webhook ativado! A IA agora vai responder mensagens dos devedores automaticamente.')
+      if (data.ok) {
+        setTesteMsg('✅ Webhook ativado! A IA agora vai responder mensagens dos devedores automaticamente.')
+      } else {
+        setTesteMsg(`⚠️ Não foi possível configurar automaticamente. ${data.instrucoes || 'Configure manualmente no painel Z-API.'}`)
+      }
     } catch (err: any) {
       setTesteMsg('❌ ' + err.message)
     } finally {
