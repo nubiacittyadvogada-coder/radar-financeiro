@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: true, ignorado: 'proprio numero' })
     }
 
+    console.log(`[Webhook ZApi] Mensagem de ${telefone}: "${texto.substring(0, 80)}"`)
+
     // Processa em background (não bloqueia o webhook)
     processarMensagemDevedor(conta as any, telefone, texto).catch((err) => {
       console.error('[Webhook ZApi] Erro ao processar mensagem:', err)

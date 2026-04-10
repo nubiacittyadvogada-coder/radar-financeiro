@@ -34,9 +34,12 @@ export async function processarMensagemDevedor(
   telefoneDevedor: string,
   mensagemTexto: string
 ): Promise<void> {
-  // Busca o devedor pelo telefone
-  const devedor = await prisma.clienteDevedor.findFirst({
-    where: { contaEmpresaId: contaEmpresa.id, telefone: telefoneDevedor },
+  // Normaliza telefone recebido (só dígitos)
+  const telNormalizado = telefoneDevedor.replace(/\D/g, '')
+
+  // Busca todos devedores da empresa e compara telefone normalizado
+  const devedores = await prisma.clienteDevedor.findMany({
+    where: { contaEmpresaId: contaEmpresa.id, ativo: true },
     include: {
       cobrancas: {
         where: { status: 'pendente' },
@@ -47,6 +50,16 @@ export async function processarMensagemDevedor(
         take: 10,
       },
     },
+  })
+
+  const devedor = devedores.find(d => {
+    if (!d.telefone) return false
+    const telDB = d.telefone.replace(/\D/g, '')
+    // Compara exato, ou sem o 55 do país, ou adicionando 55
+    return telDB === telNormalizado
+      || telDB === `55${telNormalizado}`
+      || `55${telDB}` === telNormalizado
+      || telDB.slice(-10) === telNormalizado.slice(-10) // últimos 10 dígitos (DDD+número)
   })
 
   if (!devedor) return // número não cadastrado como devedor — ignora
