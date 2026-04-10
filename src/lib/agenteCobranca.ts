@@ -10,7 +10,7 @@ import { getZApiClient } from './zapi'
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 
-type PerfilDevedor = 'primeiro_atraso' | 'recorrente' | 'longo_prazo'
+type PerfilDevedor = 'primeiro_atraso' | 'segundo_atraso' | 'recorrente' | 'longo_prazo'
 
 /**
  * Gera mensagem de cobrança personalizada com IA.
@@ -30,6 +30,7 @@ async function gerarMensagemCobranca(
 
   const perfilDescricao = {
     primeiro_atraso: 'primeiro atraso — tom amigável e compreensivo, lembre que esquecimentos acontecem',
+    segundo_atraso: 'segundo atraso — tom cordial mas direto, reforce a necessidade de regularização e ofereça facilidades de pagamento',
     recorrente: 'atraso recorrente — tom mais firme mas ainda respeitoso, mencione a importância de regularizar',
     longo_prazo: 'longo período em atraso — tom sério, mencione consequências, mas abra espaço para acordo',
   }[perfil]
@@ -86,12 +87,16 @@ function gerarMensagemFallback(
   const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   const saudacao = perfil === 'primeiro_atraso'
     ? `Olá, ${nome}! Tudo bem? Passando para lembrá-lo(a)`
+    : perfil === 'segundo_atraso'
+    ? `${nome}, entramos em contato novamente`
     : perfil === 'recorrente'
     ? `${nome}, verificamos`
     : `${nome}, sua situação`
 
   const corpo = perfil === 'primeiro_atraso'
     ? `que há um débito em aberto referente a "${descricao}" no valor de ${fmt(valor)}, com ${diasAtraso} dia(s) em atraso. Acreditamos que pode ter sido um esquecimento.`
+    : perfil === 'segundo_atraso'
+    ? `pois o débito "${descricao}" de ${fmt(valor)} permanece em aberto, com ${diasAtraso} dias em atraso. Gostaríamos de ajudá-lo(a) a regularizar — podemos verificar opções de pagamento facilitado.`
     : perfil === 'recorrente'
     ? `que o débito "${descricao}" de ${fmt(valor)} está com ${diasAtraso} dias em atraso. Regularize para evitar maiores encargos.`
     : `com o débito "${descricao}" de ${fmt(valor)} está com ${diasAtraso} dias em atraso. Entre em contato conosco para negociarmos uma solução.`
@@ -121,8 +126,28 @@ export async function executarCobrancaDevedor(cobrancaId: string) {
     (Date.now() - new Date(cobranca.vencimento).getTime()) / (1000 * 60 * 60 * 24)
   ))
 
-  // Determina perfil do devedor
+  // Determina e atualiza perfil do devedor automaticamente
   let perfil: PerfilDevedor = clienteDevedor.perfilDevedor as PerfilDevedor
+
+  const totalCobrancasPendentes = await prisma.cobrancaDevedor.count({
+    where: { clienteDevedorId: clienteDevedor.id, status: 'pendente' },
+  })
+  const totalCobrancasHistorico = await prisma.cobrancaDevedor.count({
+    where: { clienteDevedorId: clienteDevedor.id },
+  })
+
+  let novoPerfil: PerfilDevedor = 'primeiro_atraso'
+  if (totalCobrancasHistorico >= 5 || diasAtraso >= 90) novoPerfil = 'longo_prazo'
+  else if (totalCobrancasHistorico >= 3 || diasAtraso >= 60) novoPerfil = 'recorrente'
+  else if (totalCobrancasHistorico >= 2 || diasAtraso >= 30) novoPerfil = 'segundo_atraso'
+
+  if (novoPerfil !== perfil) {
+    perfil = novoPerfil
+    await prisma.clienteDevedor.update({
+      where: { id: clienteDevedor.id },
+      data: { perfilDevedor: novoPerfil },
+    })
+  }
 
   // Cria/busca cobrança no Asaas se configurado
   let linkPagamento: string | null = null

@@ -26,6 +26,7 @@ type Devedor = {
 
 const PERFIL_LABEL: Record<string, { label: string; color: string }> = {
   primeiro_atraso: { label: 'Primeiro atraso', color: 'bg-yellow-100 text-yellow-700' },
+  segundo_atraso: { label: 'Segundo atraso', color: 'bg-amber-100 text-amber-700' },
   recorrente: { label: 'Recorrente', color: 'bg-orange-100 text-orange-700' },
   longo_prazo: { label: 'Longo prazo', color: 'bg-red-100 text-red-700' },
 }
@@ -409,6 +410,7 @@ export default function CobrancaPage() {
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 >
                   <option value="primeiro_atraso">Primeiro atraso</option>
+                  <option value="segundo_atraso">Segundo atraso</option>
                   <option value="recorrente">Recorrente</option>
                   <option value="longo_prazo">Longo prazo</option>
                 </select>

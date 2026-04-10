@@ -486,7 +486,7 @@ model ClienteDevedor {
   asaasCustomerId String?      // ID do cliente no Asaas
 
   // Perfil do devedor
-  perfilDevedor String @default("primeiro_atraso") // 'primeiro_atraso' | 'recorrente' | 'longo_prazo'
+  perfilDevedor String @default("primeiro_atraso") // 'primeiro_atraso' | 'segundo_atraso' | 'recorrente' | 'longo_prazo'
   totalDevido   Decimal  @db.Decimal(12, 2) @default(0)
   totalPago     Decimal  @db.Decimal(12, 2) @default(0)
 

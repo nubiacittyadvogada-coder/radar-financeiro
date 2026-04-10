@@ -99,8 +99,9 @@ export async function POST(req: NextRequest) {
         const totalCobrancas = cobranca.clienteDevedor._count.cobrancas
         let novoPerfil = cobranca.clienteDevedor.perfilDevedor
 
-        if (totalCobrancas >= 3) novoPerfil = 'longo_prazo'
-        else if (totalCobrancas >= 2) novoPerfil = 'recorrente'
+        if (totalCobrancas >= 5) novoPerfil = 'longo_prazo'
+        else if (totalCobrancas >= 3) novoPerfil = 'recorrente'
+        else if (totalCobrancas >= 2) novoPerfil = 'segundo_atraso'
 
         if (novoPerfil !== cobranca.clienteDevedor.perfilDevedor) {
           await prisma.clienteDevedor.update({
