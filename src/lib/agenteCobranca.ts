@@ -122,6 +122,19 @@ export async function executarCobrancaDevedor(cobrancaId: string) {
   const { clienteDevedor } = cobranca
   const { contaEmpresa } = clienteDevedor
 
+  // Verifica intervalo mínimo de 3 dias desde a última mensagem enviada ao devedor
+  const INTERVALO_DIAS = 3
+  const ultimaMensagem = await prisma.mensagemCobranca.findFirst({
+    where: { clienteDevedorId: clienteDevedor.id, direcao: 'enviada', enviado: true },
+    orderBy: { criadoEm: 'desc' },
+  })
+  if (ultimaMensagem) {
+    const diasDesdeUltima = (Date.now() - new Date(ultimaMensagem.criadoEm).getTime()) / (1000 * 60 * 60 * 24)
+    if (diasDesdeUltima < INTERVALO_DIAS) {
+      return { enviado: false, pulado: true, motivo: `aguardando intervalo (${Math.ceil(INTERVALO_DIAS - diasDesdeUltima)}d restante)` }
+    }
+  }
+
   const diasAtraso = Math.max(0, Math.floor(
     (Date.now() - new Date(cobranca.vencimento).getTime()) / (1000 * 60 * 60 * 24)
   ))
