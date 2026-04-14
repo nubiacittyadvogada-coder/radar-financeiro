@@ -13,6 +13,7 @@ type Devedor = {
   perfilDevedor: string
   totalDevido: number
   totalPago: number
+  cobrancaPausadaAte?: string | null
   cobrancas: Array<{
     id: string
     descricao: string
@@ -55,6 +56,7 @@ export default function CobrancaPage() {
   const [decidindo, setDecidindo] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [sincronizando, setSincronizando] = useState(false)
+  const [pausando, setPausando] = useState<string | null>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -114,6 +116,21 @@ export default function CobrancaPage() {
       alert('Erro: ' + err.message)
     } finally {
       setSincronizando(false)
+    }
+  }
+
+  async function pausarCobranca(devedorId: string, dias: number) {
+    if (!token) return
+    setPausando(devedorId)
+    try {
+      const res = await fetch(`/api/v2/empresa/devedores/${devedorId}/pausar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ dias }),
+      })
+      if (res.ok && token) carregarDevedores(token)
+    } finally {
+      setPausando(null)
     }
   }
 
@@ -546,13 +563,39 @@ export default function CobrancaPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 items-end">
-                      <button
-                        onClick={() => cobrar(d.id)}
-                        disabled={cobrando === d.id || d.cobrancas.length === 0}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-                      >
-                        {cobrando === d.id ? 'Enviando...' : '📲 Cobrar agora'}
-                      </button>
+                      {/* Indicador de pausa */}
+                      {d.cobrancaPausadaAte && new Date(d.cobrancaPausadaAte) > new Date() && (
+                        <span className="text-xs text-amber-600 font-medium">
+                          ⏸ Pausado até {new Date(d.cobrancaPausadaAte).toLocaleDateString('pt-BR')}
+                        </span>
+                      )}
+                      <div className="flex gap-2">
+                        {/* Botão pausar/retomar */}
+                        {d.cobrancaPausadaAte && new Date(d.cobrancaPausadaAte) > new Date() ? (
+                          <button
+                            onClick={() => pausarCobranca(d.id, 0)}
+                            disabled={pausando === d.id}
+                            className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 disabled:opacity-50"
+                          >
+                            ▶ Retomar
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => pausarCobranca(d.id, 7)}
+                            disabled={pausando === d.id}
+                            className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            ⏸ Pausar 7d
+                          </button>
+                        )}
+                        <button
+                          onClick={() => cobrar(d.id)}
+                          disabled={cobrando === d.id || d.cobrancas.length === 0}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {cobrando === d.id ? 'Enviando...' : '📲 Cobrar agora'}
+                        </button>
+                      </div>
                       <button
                         onClick={() => {
                           setFormCobranca({ descricao: '', valor: '', vencimento: '' })

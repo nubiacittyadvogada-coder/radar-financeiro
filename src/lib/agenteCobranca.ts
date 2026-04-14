@@ -122,6 +122,11 @@ export async function executarCobrancaDevedor(cobrancaId: string) {
   const { clienteDevedor } = cobranca
   const { contaEmpresa } = clienteDevedor
 
+  // Verifica se cobrança está pausada para este devedor
+  if (clienteDevedor.cobrancaPausadaAte && new Date(clienteDevedor.cobrancaPausadaAte) > new Date()) {
+    return { enviado: false, pulado: true, motivo: 'cobrança pausada manualmente' }
+  }
+
   // Verifica intervalo mínimo de 3 dias desde a última mensagem enviada ao devedor
   const INTERVALO_DIAS = 3
   const ultimaMensagem = await prisma.mensagemCobranca.findFirst({

@@ -491,6 +491,7 @@ model ClienteDevedor {
   totalPago     Decimal  @db.Decimal(12, 2) @default(0)
 
   ativo    Boolean  @default(true)
+  cobrancaPausadaAte DateTime? // se preenchido, cobrança automática fica suspensa até esta data
   criadoEm DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
