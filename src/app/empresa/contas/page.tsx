@@ -38,6 +38,10 @@ export default function EmpresaContasPage() {
     descricao: '', fornecedor: '', valor: '', vencimento: '', categoria: '', recorrente: false,
   })
 
+  // Modal de edição
+  const [editando, setEditando] = useState<Conta | null>(null)
+  const [editForm, setEditForm] = useState({ descricao: '', fornecedor: '', valor: '', vencimento: '' })
+
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
     const t = localStorage.getItem('radar_token')
@@ -52,7 +56,6 @@ export default function EmpresaContasPage() {
     setLoading(true)
     const res = await fetch('/api/v2/empresa/contas', { headers: { Authorization: `Bearer ${t}` } })
     if (res.ok) {
-      // Atualiza status: se vencimento < hoje e pendente => atrasado
       const data: Conta[] = await res.json()
       const hoje = new Date()
       hoje.setHours(0, 0, 0, 0)
@@ -68,6 +71,45 @@ export default function EmpresaContasPage() {
     if (!token) return
     setProcessando(id)
     await fetch(`/api/v2/empresa/contas/${id}/pagar`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } })
+    await carregarContas(token)
+    setProcessando(null)
+  }
+
+  function abrirEdicao(c: Conta) {
+    setEditando(c)
+    setEditForm({
+      descricao: c.descricao,
+      fornecedor: c.fornecedor || '',
+      valor: String(c.valor),
+      vencimento: c.vencimento.slice(0, 10),
+    })
+  }
+
+  async function salvarEdicao() {
+    if (!token || !editando) return
+    setProcessando(editando.id)
+    const res = await fetch(`/api/v2/empresa/contas/${editando.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        descricao: editForm.descricao,
+        fornecedor: editForm.fornecedor || null,
+        valor: Number(editForm.valor),
+        vencimento: editForm.vencimento,
+      }),
+    })
+    if (res.ok) {
+      setEditando(null)
+      await carregarContas(token)
+    }
+    setProcessando(null)
+  }
+
+  async function excluirConta(id: string) {
+    if (!token) return
+    if (!confirm('Excluir esta conta a pagar?')) return
+    setProcessando(id)
+    await fetch(`/api/v2/empresa/contas/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
     await carregarContas(token)
     setProcessando(null)
   }
@@ -217,6 +259,69 @@ export default function EmpresaContasPage() {
           ))}
         </div>
 
+        {/* Modal de edição */}
+        {editando && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+              <h2 className="font-bold mb-4 text-gray-900">Editar conta a pagar</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Descrição</label>
+                  <input
+                    value={editForm.descricao}
+                    onChange={(e) => setEditForm({ ...editForm, descricao: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium">Fornecedor</label>
+                  <input
+                    value={editForm.fornecedor}
+                    onChange={(e) => setEditForm({ ...editForm, fornecedor: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium">Valor (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.valor}
+                      onChange={(e) => setEditForm({ ...editForm, valor: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium">Vencimento</label>
+                    <input
+                      type="date"
+                      value={editForm.vencimento}
+                      onChange={(e) => setEditForm({ ...editForm, vencimento: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => setEditando(null)}
+                  className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={salvarEdicao}
+                  disabled={processando === editando.id}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {processando === editando.id ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Preview modal importação */}
         {showPreview && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-auto">
@@ -287,29 +392,46 @@ export default function EmpresaContasPage() {
         ) : (
           <div className="space-y-2">
             {contasFiltradas.map((c) => (
-              <div key={c.id} className={`bg-white rounded-xl px-5 py-4 shadow-sm border flex items-center justify-between ${c.status === 'atrasado' ? 'border-red-200' : ''}`}>
-                <div>
-                  <div className="font-medium text-gray-900 text-sm">{c.descricao}</div>
-                  {c.fornecedor && <div className="text-xs text-gray-400">{c.fornecedor}</div>}
+              <div key={c.id} className={`bg-white rounded-xl px-5 py-4 shadow-sm border flex items-center justify-between gap-3 ${c.status === 'atrasado' ? 'border-red-200' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm truncate">{c.descricao}</div>
+                  {c.fornecedor && <div className="text-xs text-gray-400 truncate">{c.fornecedor}</div>}
                   <div className="text-xs text-gray-500 mt-0.5">
                     Venc.: {new Date(c.vencimento).toLocaleDateString('pt-BR')}
                     {c.status === 'atrasado' && <span className="ml-2 text-red-500 font-medium">ATRASADA</span>}
                     {c.status === 'pago' && c.pagoEm && <span className="ml-2 text-green-600">Pago em {new Date(c.pagoEm).toLocaleDateString('pt-BR')}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className={`font-bold ${c.status === 'atrasado' ? 'text-red-500' : c.status === 'pago' ? 'text-green-600' : 'text-gray-800'}`}>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`font-bold text-sm ${c.status === 'atrasado' ? 'text-red-500' : c.status === 'pago' ? 'text-green-600' : 'text-gray-800'}`}>
                     {formatarMoeda(c.valor)}
                   </span>
                   {c.status !== 'pago' && (
-                    <button
-                      onClick={() => pagar(c.id)}
-                      disabled={processando === c.id}
-                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {processando === c.id ? '...' : 'Pagar'}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => abrirEdicao(c)}
+                        title="Editar"
+                        className="px-2 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs hover:bg-gray-50"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => pagar(c.id)}
+                        disabled={processando === c.id}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {processando === c.id ? '...' : 'Pagar'}
+                      </button>
+                    </>
                   )}
+                  <button
+                    onClick={() => excluirConta(c.id)}
+                    disabled={processando === c.id}
+                    title="Excluir"
+                    className="px-2 py-1.5 border border-red-100 text-red-400 rounded-lg text-xs hover:bg-red-50"
+                  >
+                    🗑
+                  </button>
                 </div>
               </div>
             ))}

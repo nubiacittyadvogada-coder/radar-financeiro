@@ -278,10 +278,22 @@ export async function POST(req: NextRequest) {
           if (contasPagasIds.includes(c.id)) return false
           const valorC = Number(c.valor)
           const diffValor = Math.abs(valorC - valorD) / (valorC || 1)
-          if (diffValor > 0.05) return false
           if (!dataD) return false
           const diffDias = Math.abs(new Date(c.vencimento).getTime() - dataD.getTime()) / 86400000
-          return diffDias <= 7
+
+          // 1. Match exato: ±5% valor + ±7 dias
+          if (diffValor <= 0.05 && diffDias <= 7) return true
+
+          // 2. Match por nome: palavras da descrição do OFX aparecem na conta a pagar (±30% valor + ±14 dias)
+          if (diffValor <= 0.30 && diffDias <= 14 && d.descricao && c.descricao) {
+            const palavrasOfx = d.descricao.toUpperCase().split(/\s+/).filter(p => p.length > 3)
+            const descConta = c.descricao.toUpperCase()
+            const fornConta = (c.fornecedor || '').toUpperCase()
+            const hasMatch = palavrasOfx.some(p => descConta.includes(p) || fornConta.includes(p))
+            if (hasMatch) return true
+          }
+
+          return false
         })
 
         if (match) {
