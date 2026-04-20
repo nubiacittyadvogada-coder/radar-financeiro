@@ -88,6 +88,27 @@ export class AsaasClient {
     return this.req(`/customers/${clienteId}`)
   }
 
+  async listarTodosClientes(limit = 100, offset = 0) {
+    const data = await this.req(`/customers?limit=${limit}&offset=${offset}`)
+    return {
+      data: (data.data || []) as any[],
+      totalCount: data.totalCount || 0,
+      hasMore: data.hasMore || false,
+    }
+  }
+
+  async atualizarCliente(id: string, dados: Partial<{ name: string; email: string; mobilePhone: string; cpfCnpj: string }>) {
+    return this.req(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async listarCobrancasClienteTodas(customerId: string) {
+    const data = await this.req(`/payments?customer=${customerId}&limit=100&offset=0`)
+    return (data.data || []) as any[]
+  }
+
   async cancelarCobranca(id: string) {
     return this.req(`/payments/${id}`, { method: 'DELETE' })
   }

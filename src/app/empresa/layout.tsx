@@ -11,6 +11,7 @@ const NAV = [
   { href: '/empresa/importacoes', label: 'Importações', icon: '🗂️' },
   { href: '/empresa/contas', label: 'Contas a Pagar', icon: '💸' },
   { href: '/empresa/historico', label: 'Histórico', icon: '📅' },
+  { href: '/empresa/clientes', label: 'Clientes', icon: '👥' },
   { href: '/empresa/cobranca', label: 'Cobranças', icon: '🔔' },
   { href: '/empresa/relatorio', label: 'Relatório', icon: '📄' },
   { href: '/empresa/perguntar', label: 'Perguntar IA', icon: '🤖' },
