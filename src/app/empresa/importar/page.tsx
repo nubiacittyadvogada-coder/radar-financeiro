@@ -44,6 +44,7 @@ export default function EmpresaImportarPage() {
   const [limpandoOfx, setLimpandoOfx] = useState(false)
   const [mesReset, setMesReset] = useState(() => new Date().getMonth() + 1)
   const [anoReset, setAnoReset] = useState(() => new Date().getFullYear())
+  const [mesesSelecionados, setMesesSelecionados] = useState<Set<string>>(new Set())
 
   const receitasRef = useRef<HTMLInputElement>(null)
   const despesasRef = useRef<HTMLInputElement>(null)
@@ -614,6 +615,8 @@ export default function EmpresaImportarPage() {
       const [ano, mes] = k.split('-').map(Number)
       return { mes, ano, total, tipo }
     }).sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+    // Seleciona todos os meses por padrão
+    setMesesSelecionados(new Set(resumo.map(r => `${r.mes}-${r.ano}`)))
     setPreview({ resumo, totalLinhas: lancamentos.length, lancamentos })
   }
 
@@ -632,13 +635,19 @@ export default function EmpresaImportarPage() {
         if (!res.ok) throw new Error(data.erro)
         setSucesso(`${data.total} contas a pagar importadas com sucesso!`)
       } else {
-        // Agrupa por mês e importa cada um
+        // Agrupa por mês e importa apenas os meses selecionados
         const porMes: Record<string, any[]> = {}
         preview.lancamentos.forEach(l => {
           const k = `${l.mes}-${l.ano}`
+          if (!mesesSelecionados.has(k)) return // pula meses desmarcados
           if (!porMes[k]) porMes[k] = []
           porMes[k].push(l)
         })
+
+        if (Object.keys(porMes).length === 0) {
+          setErro('Selecione pelo menos um mês para importar.')
+          return
+        }
 
         let totalImportado = 0
         for (const [k, lans] of Object.entries(porMes)) {
@@ -684,23 +693,48 @@ export default function EmpresaImportarPage() {
             <h2 className="font-semibold text-gray-900 mb-1">
               Prévia — {preview.totalLinhas} registros detectados
             </h2>
-            <p className="text-sm text-gray-500 mb-4">Distribuição por mês (o sistema importa automaticamente):</p>
+            <p className="text-sm text-gray-500 mb-1">
+              Marque apenas os meses que deseja importar:
+            </p>
+            <p className="text-xs text-blue-600 bg-blue-50 rounded px-3 py-2 mb-4">
+              💡 Desmarque os meses que já foram importados (ex: Abril) para evitar duplicações.
+            </p>
             <div className="space-y-2 mb-5">
-              {preview.resumo.map((r, i) => (
-                <div key={i} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded-lg">
-                  <span className="font-medium text-gray-700">{MESES[r.mes]} {r.ano}</span>
-                  <span className="text-gray-600">{formatarMoeda(r.total)}</span>
-                </div>
-              ))}
+              {preview.resumo.map((r, i) => {
+                const k = `${r.mes}-${r.ano}`
+                const selecionado = mesesSelecionados.has(k)
+                return (
+                  <label key={i} className={`flex items-center justify-between text-sm px-3 py-2 rounded-lg cursor-pointer border transition-colors ${selecionado ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-50'}`}>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selecionado}
+                        onChange={(e) => {
+                          const novo = new Set(mesesSelecionados)
+                          if (e.target.checked) novo.add(k)
+                          else novo.delete(k)
+                          setMesesSelecionados(novo)
+                        }}
+                        className="w-4 h-4 accent-blue-600"
+                      />
+                      <span className="font-medium text-gray-700">{MESES[r.mes]} {r.ano}</span>
+                    </div>
+                    <span className="text-gray-600">{formatarMoeda(r.total)}</span>
+                  </label>
+                )
+              })}
+            </div>
+            <div className="text-xs text-gray-500 mb-4">
+              {mesesSelecionados.size} de {preview.resumo.length} mês(es) selecionado(s)
             </div>
             <div className="flex gap-3">
               <button onClick={() => setPreview(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>
               <button
                 onClick={confirmarImport}
-                disabled={importando}
+                disabled={importando || mesesSelecionados.size === 0}
                 className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
               >
-                {importando ? 'Importando...' : `Confirmar importação`}
+                {importando ? 'Importando...' : `Importar ${mesesSelecionados.size} mês(es)`}
               </button>
             </div>
           </div>
