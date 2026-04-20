@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatarMoeda } from '@/lib/utils'
+import * as XLSX from 'xlsx'
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -554,12 +555,78 @@ export default function ClientesPage() {
     setErro('')
     setSucesso('')
     try {
-      const fd = new FormData()
-      fd.append('file', file)
+      // Parseia XLSX no cliente (mesmo padrão do importar/page.tsx)
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+      if (rows.length < 2) throw new Error('Planilha vazia')
+
+      const header = rows[0].map((c: any) =>
+        String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      )
+      const ci = (nomes: string[]) => {
+        for (const n of nomes) {
+          const idx = header.findIndex(h => h.includes(n))
+          if (idx >= 0) return idx
+        }
+        return -1
+      }
+
+      const colVencimento = header.findIndex(h => h.includes('vencimento') && !h.includes('original'))
+      const cols = {
+        asaasId:    ci(['identificador']),
+        nome:       ci(['nome']),
+        cpfCnpj:    ci(['cpf', 'cnpj']),
+        email:      ci(['email']),
+        celular:    ci(['celular', 'fone']),
+        vencimento: colVencimento >= 0 ? colVencimento : ci(['vencimento']),
+        valor:      ci(['valor']),
+        situacao:   ci(['situacao', 'status', 'situa']),
+        descricao:  ci(['descricao', 'descri']),
+        formaPgto:  ci(['forma de pagamento', 'forma']),
+        dataPgto:   ci(['data de pagamento']),
+      }
+
+      function parsearData(v: any): string | null {
+        if (!v) return null
+        if (typeof v === 'number' && v > 40000) {
+          return new Date((v - 25569) * 86400000).toISOString().slice(0, 10)
+        }
+        const s = String(v)
+        const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`
+        if (s.match(/^\d{4}-\d{2}-\d{2}/)) return s.slice(0, 10)
+        return null
+      }
+      function parsearValor(v: any): number {
+        if (typeof v === 'number') return Math.abs(v)
+        const s = String(v).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
+        return Math.abs(parseFloat(s) || 0)
+      }
+
+      const cobrancas = rows.slice(1)
+        .map(row => ({
+          asaasId:   String(row[cols.asaasId]  || '').trim(),
+          nome:      String(row[cols.nome]      || '').trim(),
+          cpfCnpj:   String(row[cols.cpfCnpj]   || '').replace(/\D/g, ''),
+          email:     String(row[cols.email]     || '').trim() || null,
+          celular:   String(row[cols.celular]   || '').replace(/\D/g, '') || null,
+          vencimento: parsearData(row[cols.vencimento]),
+          valor:     parsearValor(row[cols.valor]),
+          situacao:  String(row[cols.situacao]  || '').trim(),
+          descricao: String(row[cols.descricao] || '').trim() || null,
+          formaPgto: String(row[cols.formaPgto] || '').trim() || null,
+          dataPgto:  parsearData(row[cols.dataPgto]),
+        }))
+        .filter(c => c.nome && c.vencimento && c.valor > 0)
+
+      if (cobrancas.length === 0) throw new Error('Nenhuma cobrança encontrada. Verifique se é o arquivo exportado do Asaas.')
+
       const res = await fetch('/api/v2/empresa/clientes/importar-cobrancas', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cobrancas }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.erro)
