@@ -56,13 +56,15 @@ export async function GET(req: NextRequest) {
       const dataVenc = new Date(cobranca.vencimento).toLocaleDateString('pt-BR')
       const linkParte = cobranca.asaasLink
         ? `\n\nPague de forma rápida pelo link:\n${cobranca.asaasLink}`
+        : contaEmpresa.chavePix
+        ? `\n\nPIX: *${contaEmpresa.chavePix}*`
         : ''
 
       const mensagem = `Olá, ${clienteDevedor.nome}! 👋\n\n` +
         `Passando para lembrar que a parcela *"${cobranca.descricao}"* no valor de *${fmt(Number(cobranca.valor))}* ` +
         `vence no dia *${dataVenc}*.\n\n` +
         `Evite encargos e regularize antes do vencimento!${linkParte}\n\n` +
-        `Qualquer dúvida, estamos à disposição.`
+        `Qualquer dúvida, estamos à disposição. 🙏`
 
       const enviado = await zapi.enviarTexto(clienteDevedor.telefone, mensagem)
 

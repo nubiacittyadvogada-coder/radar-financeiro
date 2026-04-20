@@ -302,6 +302,9 @@ model ContaEmpresa {
   metaLucro   Decimal? @db.Decimal(12, 2)
   metaReceita Decimal? @db.Decimal(12, 2)
 
+  // Chave PIX para incluir nos lembretes de cobrança
+  chavePix     String?
+
   // Token para formulário público de espécie (sem login)
   tokenEspecie String? @default(uuid())
 

@@ -44,6 +44,7 @@ export default function EmpresaConfiguracoesPage() {
         cnpj: data.cnpj || '',
         setor: data.setor || '',
         telefoneAlerta: data.telefoneAlerta || '',
+        chavePix: data.chavePix || '',
         alertaAtivo: data.alertaAtivo || false,
         metaReceita: data.metaReceita || '',
         metaLucro: data.metaLucro || '',
@@ -223,6 +224,8 @@ export default function EmpresaConfiguracoesPage() {
           </div>
           {inp('Número WhatsApp', 'telefoneAlerta', 'text', '5531999096712')}
           <p className="text-xs text-gray-500">Formato: 55 + DDD + número (sem espaços ou traços)</p>
+          {inp('Chave PIX', 'chavePix', 'text', 'Ex: financeiro@ncadvogados.com.br ou CPF/CNPJ')}
+          <p className="text-xs text-gray-500">Incluída automaticamente nos lembretes de honorários enviados aos clientes</p>
         </div>
 
         {/* Asaas */}

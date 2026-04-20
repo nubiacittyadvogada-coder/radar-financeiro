@@ -41,6 +41,33 @@ export class ZApiClient {
   }
 
   /**
+   * Envia um documento (PDF, etc.) via base64.
+   * Z-API endpoint: POST /send-document/
+   * @param base64 conteúdo do arquivo em base64 (sem prefixo data:...)
+   */
+  async enviarDocumento(telefone: string, base64: string, fileName: string, caption = ''): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/send-document/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Client-Token': this.clientToken,
+        },
+        body: JSON.stringify({
+          phone: telefone,
+          document: base64,
+          fileName,
+          caption,
+        }),
+      })
+      const data = await res.json()
+      return res.ok && !data.error
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Configura a URL do webhook de recebimento de mensagens na Z-API.
    * Tenta múltiplos endpoints e formatos da API.
    */

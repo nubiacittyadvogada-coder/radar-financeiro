@@ -32,7 +32,7 @@ export async function PATCH(req: NextRequest) {
 
     // Apenas campos permitidos
     const permitidos = [
-      'nomeEmpresa', 'cnpj', 'setor', 'telefoneAlerta', 'alertaAtivo',
+      'nomeEmpresa', 'cnpj', 'setor', 'telefoneAlerta', 'alertaAtivo', 'chavePix',
       'asaasAtivo', 'asaasApiKey', 'zapiInstanceId', 'zapiToken', 'zapiClientToken',
       'cobrancaDescontoMax', 'cobrancaParcelasMax', 'metaLucro', 'metaReceita',
     ]
