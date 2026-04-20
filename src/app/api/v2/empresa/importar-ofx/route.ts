@@ -109,7 +109,7 @@ function parsearOFX(conteudo: string): OFXTransacao[] {
 // CNPJ da própria empresa — créditos deste CNPJ são transferências do Asaas para o Sicredi
 const CNPJ_PROPRIO = '40993929000183'
 
-// Retorna true para entradas que devem ser completamente ignoradas (fatura cartão, etc.)
+// Retorna true para entradas que devem ser completamente ignoradas (fatura cartão, transferências internas, etc.)
 function deveIgnorar(t: OFXTransacao): boolean {
   const d = t.descricao.toUpperCase()
   if (d.includes('SICREDI DEBITO MASTER')) return true
@@ -118,6 +118,8 @@ function deveIgnorar(t: OFXTransacao): boolean {
   if (d.includes('DEBITO MASTER')) return true
   if (d.includes('PAGTO FATURA')) return true
   if (d.includes('FAT CARTAO')) return true
+  // Débito para o próprio CNPJ = transferência interna (ex: Sicredi → Asaas)
+  if (t.tipo === 'debito' && t.cnpjCpf === CNPJ_PROPRIO) return true
   return false
 }
 
