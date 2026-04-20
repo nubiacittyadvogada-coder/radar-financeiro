@@ -18,7 +18,18 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { lancamentos, mes, ano, tipo, nomeArquivo } = body
-    const isPdfImport = tipo === 'extrato_pdf'
+    // PDF e OFX têm dados reais de transação — ativam conciliação automática
+    const isTransactionImport = tipo === 'extrato_pdf' || tipo === 'ofx_sicredi'
+    const isPdfImport = isTransactionImport // compatibilidade com lógica abaixo
+
+    // Mapeia tipo de importação para origem do lançamento
+    const origemMap: Record<string, string> = {
+      extrato_pdf: 'importacao',
+      ofx_sicredi: 'ofx_sicredi',
+      receitas: 'importacao',
+      despesas: 'importacao',
+    }
+    const origemLancamento = origemMap[tipo] || 'importacao'
 
     if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
       return Response.json({ erro: 'lancamentos[] obrigatório' }, { status: 400 })
@@ -61,7 +72,7 @@ export async function POST(req: NextRequest) {
       return {
         contaEmpresaId: conta.id,
         importacaoId: importacao.id,
-        origem: 'importacao' as const,
+        origem: origemLancamento,
         mes: Number(mes),
         ano: Number(ano),
         favorecido: l.favorecido ? String(l.favorecido).trim() : null,

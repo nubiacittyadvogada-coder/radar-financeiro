@@ -32,16 +32,19 @@ export default function EmpresaImportarPage() {
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [preview, setPreview] = useState<PreviewImport | null>(null)
-  const [tipoImport, setTipoImport] = useState<'receitas' | 'despesas' | 'contas' | 'pdf' | null>(null)
+  const [tipoImport, setTipoImport] = useState<'receitas' | 'despesas' | 'contas' | 'pdf' | 'ofx' | null>(null)
   const [importando, setImportando] = useState(false)
   const [sucesso, setSucesso] = useState<string | null>(null)
   const [previewPdf, setPreviewPdf] = useState<any | null>(null)
   const [confirmandoPdf, setConfirmandoPdf] = useState(false)
+  const [previewOfx, setPreviewOfx] = useState<any | null>(null)
+  const [confirmandoOfx, setConfirmandoOfx] = useState(false)
 
   const receitasRef = useRef<HTMLInputElement>(null)
   const despesasRef = useRef<HTMLInputElement>(null)
   const contasRef = useRef<HTMLInputElement>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
+  const ofxRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -413,6 +416,86 @@ export default function EmpresaImportarPage() {
     }
   }
 
+  async function processarOfx(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !token) return
+    setErro(''); setSucesso(null); setPreviewOfx(null); setLoading(true); setTipoImport('ofx')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/v2/empresa/importar-ofx', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setPreviewOfx(data)
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setLoading(false)
+      if (ofxRef.current) ofxRef.current.value = ''
+    }
+  }
+
+  async function confirmarOfx() {
+    if (!previewOfx || !token) return
+    setConfirmandoOfx(true)
+    setErro('')
+    try {
+      // Agrupa por mês
+      const porMes: Record<string, any[]> = {}
+      for (const t of previewOfx.transacoes) {
+        const data = new Date(t.data)
+        const mes = data.getUTCMonth() + 1
+        const ano = data.getUTCFullYear()
+        const k = `${mes}-${ano}`
+        if (!porMes[k]) porMes[k] = []
+        porMes[k].push({
+          tipo: t.tipoLancamento,
+          subtipo: t.subtipo,
+          planoConta: t.planoConta,
+          grupoConta: t.grupoConta,
+          favorecido: t.clienteNome || t.descricao,
+          descricao: t.descricao,
+          valor: t.valor,
+          data: t.data,
+          pago: true,
+          mes,
+          ano,
+        })
+      }
+
+      let totalImportado = 0
+      let totalDuplicatas = 0
+      let totalConciliados = 0
+      for (const [k, lans] of Object.entries(porMes)) {
+        const [mes, ano] = k.split('-').map(Number)
+        const res = await fetch('/api/v2/empresa/importar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ lancamentos: lans, mes, ano, tipo: 'ofx_sicredi', nomeArquivo: `extrato_sicredi_${previewOfx.periodo}` }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.erro)
+        totalImportado += data.inseridos ?? data.total ?? lans.length
+        totalDuplicatas += data.duplicatas ?? 0
+        totalConciliados += (data.conciliadosManual ?? 0) + (data.conciliadosContasPagar ?? 0)
+      }
+
+      setPreviewOfx(null)
+      const partes = [`${totalImportado} lançamentos importados`]
+      if (totalConciliados > 0) partes.push(`${totalConciliados} conciliado(s) como pago`)
+      if (totalDuplicatas > 0) partes.push(`${totalDuplicatas} duplicata(s) ignorada(s)`)
+      setSucesso(partes.join(' · ') + '!')
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setConfirmandoOfx(false)
+    }
+  }
+
   function gerarPreview(lancamentos: any[], tipo: string) {
     const por_mes: Record<string, number> = {}
     lancamentos.forEach(l => {
@@ -552,6 +635,50 @@ export default function EmpresaImportarPage() {
           </div>
         )}
 
+        {/* Preview OFX */}
+        {previewOfx && (
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+            <h2 className="font-semibold text-gray-900 mb-1">
+              🏦 Extrato {previewOfx.banco} — {previewOfx.periodo}
+            </h2>
+            <div className="flex gap-4 text-sm text-gray-600 mb-3">
+              <span className="text-green-600 font-medium">↑ {previewOfx.transacoes.filter((t: any) => t.tipo === 'receita').length} créditos</span>
+              <span className="text-red-500 font-medium">↓ {previewOfx.transacoes.filter((t: any) => t.tipo === 'despesa').length} débitos</span>
+              {previewOfx.creditosComCliente > 0 && (
+                <span className="text-blue-600 font-medium">🔗 {previewOfx.creditosComCliente} clientes identificados</span>
+              )}
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border rounded-lg p-2">
+              {previewOfx.transacoes.map((t: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-xs py-1 border-b last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={t.tipo === 'receita' ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>
+                      {t.tipo === 'receita' ? '↑' : '↓'}
+                    </span>
+                    <span className="truncate text-gray-700">
+                      {t.clienteNome ? <strong>{t.clienteNome}</strong> : t.descricao}
+                    </span>
+                    <span className="text-gray-400 shrink-0">{t.data}</span>
+                  </div>
+                  <span className={`font-semibold shrink-0 ml-2 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-500'}`}>
+                    R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setPreviewOfx(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>
+              <button
+                onClick={confirmarOfx}
+                disabled={confirmandoOfx}
+                className="px-5 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+              >
+                {confirmandoOfx ? 'Importando...' : `✅ Importar ${previewOfx.transacoes.length} transações`}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Cards de importação */}
         <div className="grid md:grid-cols-3 gap-4">
           {/* Receitas */}
@@ -623,6 +750,27 @@ export default function EmpresaImportarPage() {
                 {loading && tipoImport === 'pdf' ? '⏳ Analisando PDF...' : '📄 Importar Extrato PDF'}
               </button>
               <input ref={pdfRef} type="file" accept=".pdf" className="hidden" onChange={processarPdf} />
+            </div>
+          </div>
+        </div>
+
+        {/* Extrato OFX Sicredi */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-teal-100">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl">🏦</div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-gray-900">Extrato OFX (Sicredi / Qualquer banco)</h2>
+              <p className="text-xs text-gray-500 mt-1 mb-4">
+                Exporte o extrato em formato OFX no seu banco e importe aqui. O sistema identifica automaticamente clientes pelo CPF/CNPJ nos créditos PIX e concilia com lançamentos existentes.
+              </p>
+              <button
+                onClick={() => ofxRef.current?.click()}
+                disabled={loading}
+                className="px-5 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+              >
+                {loading && tipoImport === 'ofx' ? '⏳ Lendo OFX...' : '📂 Importar Extrato OFX'}
+              </button>
+              <input ref={ofxRef} type="file" accept=".ofx,.qfx,.txt" className="hidden" onChange={processarOfx} />
             </div>
           </div>
         </div>

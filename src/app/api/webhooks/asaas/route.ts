@@ -10,7 +10,28 @@
 
 import { NextRequest } from 'next/server'
 import prisma from '@/server/lib/db'
+import { calcularFechamentoEmpresa } from '@/server/lib/calcularFechamentoEmpresa'
 import { enviarEmailPagamentoRecebido } from '@/lib/email'
+
+// Mapeia a descrição da cobrança para um código de plano de contas
+function mapearPlanoConta(descricao: string): { planoConta: string; tipo: string; subtipo: string; grupoConta: string } {
+  const d = (descricao || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  if (d.includes('exito') || d.includes('êxito') || d.includes('exito')) {
+    return { planoConta: '01_RPS.ÊXITO', tipo: 'receita', subtipo: 'exito', grupoConta: 'Receitas' }
+  }
+  if (d.includes('inicial') || d.includes('contrato') || d.includes('abertura')) {
+    return { planoConta: '01_RPS.HONORÁRIOS INICIAIS', tipo: 'receita', subtipo: 'honorario_inicial', grupoConta: 'Receitas' }
+  }
+  if (d.includes('consulta')) {
+    return { planoConta: '01_RPS.CONSULTA', tipo: 'receita', subtipo: 'consulta', grupoConta: 'Receitas' }
+  }
+  if (d.includes('repasse')) {
+    return { planoConta: '01_RPS.REPASSE DE ÊXITO', tipo: 'receita', subtipo: 'repasse_exito', grupoConta: 'Receitas' }
+  }
+  // Padrão: honorários mensais
+  return { planoConta: '01_RPS.HONORÁRIOS MENSAIS', tipo: 'receita', subtipo: 'honorario_mensal', grupoConta: 'Receitas' }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +46,7 @@ export async function POST(req: NextRequest) {
       // Localiza a cobrança pelo ID do Asaas
       const cobranca = await prisma.cobrancaDevedor.findUnique({
         where: { asaasPaymentId: payment.id },
-        include: { clienteDevedor: true },
+        include: { clienteDevedor: { include: { contaEmpresa: true } } },
       })
 
       if (cobranca) {
@@ -63,16 +84,65 @@ export async function POST(req: NextRequest) {
           })
         }
 
+        // ── Cria LancamentoEmpresa automático ───────────────────────────────
+        const contaEmpresa = cobranca.clienteDevedor.contaEmpresa
+        const refObservacao = `asaas:${payment.id}`
+
+        // Dedup: não criar se já existe um lançamento para este pagamento
+        const jaExiste = await prisma.lancamentoEmpresa.findFirst({
+          where: { contaEmpresaId: contaEmpresa.id, observacoes: refObservacao },
+        })
+
+        if (!jaExiste) {
+          const dataRecebimento = payment.paymentDate
+            ? new Date(payment.paymentDate)
+            : new Date()
+
+          const mes = dataRecebimento.getMonth() + 1
+          const ano = dataRecebimento.getFullYear()
+
+          const { planoConta, tipo, subtipo, grupoConta } = mapearPlanoConta(cobranca.descricao)
+
+          await prisma.lancamentoEmpresa.create({
+            data: {
+              contaEmpresaId: contaEmpresa.id,
+              origem: 'asaas_webhook',
+              mes,
+              ano,
+              favorecido: cobranca.clienteDevedor.nome,
+              planoConta,
+              grupoConta,
+              tipo,
+              subtipo,
+              descricao: cobranca.descricao,
+              valor: valorPago,
+              dataCompetencia: dataRecebimento,
+              dataPagamento: dataRecebimento,
+              statusPg: 'pago',
+              formaPagamento: 'PIX/Boleto',
+              banco: 'ASAAS',
+              conciliado: true,
+              observacoes: refObservacao,
+            },
+          })
+
+          // Recalcula fechamento do mês
+          calcularFechamentoEmpresa(contaEmpresa.id, mes, ano).catch((e) =>
+            console.error('[Asaas Webhook] Erro ao recalcular fechamento:', e.message)
+          )
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         // Envia email para o dono da empresa
         try {
-          const contaEmpresa = await prisma.contaEmpresa.findUnique({
-            where: { id: cobranca.clienteDevedor.contaEmpresaId },
+          const contaComUsuario = await prisma.contaEmpresa.findUnique({
+            where: { id: contaEmpresa.id },
             include: { usuario: true },
           })
-          if (contaEmpresa?.usuario?.email) {
+          if (contaComUsuario?.usuario?.email) {
             enviarEmailPagamentoRecebido({
-              toEmail: contaEmpresa.usuario.email,
-              toNome: contaEmpresa.usuario.nome,
+              toEmail: contaComUsuario.usuario.email,
+              toNome: contaComUsuario.usuario.nome,
               nomeDevedor: cobranca.clienteDevedor.nome,
               descricao: cobranca.descricao,
               valor: valorPago,

@@ -52,6 +52,9 @@ export default function EmpresaLancamentosPage() {
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [limpando, setLimpando] = useState(false)
+  const [especiePendentes, setEspeciePendentes] = useState<any[]>([])
+  const [linkEspecie, setLinkEspecie] = useState<string | null>(null)
+  const [aprovando, setAprovando] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     categoria: '',
@@ -98,12 +101,37 @@ export default function EmpresaLancamentosPage() {
     if (!token) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/v2/empresa/lancamentos?mes=${mes}&ano=${ano}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) setLancamentos(await res.json())
+      const [resLanc, resEspecie] = await Promise.all([
+        fetch(`/api/v2/empresa/lancamentos?mes=${mes}&ano=${ano}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/v2/empresa/especie/pendentes', { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      if (resLanc.ok) setLancamentos(await resLanc.json())
+      if (resEspecie.ok) {
+        const esp = await resEspecie.json()
+        setEspeciePendentes(esp.pendentes || [])
+        setLinkEspecie(esp.linkEspecie || null)
+      }
     } catch {} finally { setLoading(false) }
   }, [token, mes, ano])
+
+  async function aprovarEspecie(id: string, acao: 'aprovar' | 'rejeitar') {
+    if (!token) return
+    setAprovando(id)
+    try {
+      const res = await fetch('/api/v2/empresa/especie/aprovar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ lancamentoId: id, acao }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      carregar()
+    } catch (err: any) {
+      alert('Erro: ' + err.message)
+    } finally {
+      setAprovando(null)
+    }
+  }
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -237,6 +265,73 @@ export default function EmpresaLancamentosPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-3 md:px-6 py-5 space-y-5">
+
+        {/* Espécie pendentes de aprovação */}
+        {especiePendentes.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-amber-900 flex items-center gap-2">
+                💵 Pagamentos em espécie aguardando confirmação
+                <span className="bg-amber-200 text-amber-800 text-xs font-bold px-2 py-0.5 rounded-full">{especiePendentes.length}</span>
+              </h2>
+              {linkEspecie && (
+                <button
+                  onClick={() => { navigator.clipboard.writeText(linkEspecie); alert('Link copiado!') }}
+                  className="text-xs text-amber-700 underline hover:text-amber-900"
+                >
+                  📋 Copiar link público
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {especiePendentes.map(e => (
+                <div key={e.id} className="bg-white rounded-lg border border-amber-100 px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate">{e.favorecido}</p>
+                    <p className="text-xs text-gray-500 truncate">{e.descricao}</p>
+                    <p className="text-xs text-gray-400">{e.criadoEm ? new Date(e.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-green-700 text-sm">
+                      {Number(e.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <button
+                      onClick={() => aprovarEspecie(e.id, 'aprovar')}
+                      disabled={aprovando === e.id}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
+                    >
+                      ✓ Confirmar
+                    </button>
+                    <button
+                      onClick={() => aprovarEspecie(e.id, 'rejeitar')}
+                      disabled={aprovando === e.id}
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs font-medium hover:bg-red-200 disabled:opacity-50"
+                    >
+                      ✗
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Link espécie quando não há pendentes */}
+        {especiePendentes.length === 0 && linkEspecie && (
+          <div className="bg-white border rounded-xl px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">💵 Formulário de recebimento em espécie</p>
+              <p className="text-xs text-gray-400">Compartilhe este link para registrar pagamentos em dinheiro</p>
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(linkEspecie); alert('Link copiado!') }}
+              className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 shrink-0"
+            >
+              📋 Copiar link
+            </button>
+          </div>
+        )}
+
         {/* KPIs */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-xl p-4 shadow-sm border text-center">

@@ -299,6 +299,9 @@ model ContaEmpresa {
   metaLucro   Decimal? @db.Decimal(12, 2)
   metaReceita Decimal? @db.Decimal(12, 2)
 
+  // Token para formulário público de espécie (sem login)
+  tokenEspecie String? @default(uuid())
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -309,6 +312,7 @@ model ContaEmpresa {
   alertas       AlertaEmpresa[]
   conversasIA   ConversaIAEmpresa[]
   clientesDevedor ClienteDevedor[]
+  conciliacoesDiarias ConciliacaoDiaria[]
 }
 
 model ImportacaoEmpresa {
@@ -560,6 +564,24 @@ model AcordoCobranca {
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
+}
+
+// ─── CONCILIAÇÃO DIÁRIA ───────────────────────────────────────────────────────
+
+model ConciliacaoDiaria {
+  id             String       @id @default(uuid())
+  contaEmpresaId String
+  contaEmpresa   ContaEmpresa @relation(fields: [contaEmpresaId], references: [id])
+
+  data             DateTime
+  fonte            String   // 'asaas' | 'sicredi' | 'especie'
+  status           String   // 'ok' | 'pendencias'
+  totalLancamentos Int      @default(0)
+  totalConciliados Int      @default(0)
+  pendencias       Int      @default(0)
+  detalhesJson     String?  @db.Text // JSON com detalhes das pendências
+
+  criadoEm DateTime @default(now())
 }
 
 // ─── MODO PESSOAL ─────────────────────────────────────────────────────────────

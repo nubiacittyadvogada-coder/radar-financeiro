@@ -10,15 +10,10 @@ export async function calcularFechamentoEmpresa(
   mes: number,
   ano: number
 ) {
-  const lancamentosImportados = await prisma.lancamentoEmpresa.findMany({
-    where: { contaEmpresaId, mes, ano, previsto: false, origem: 'importacao' },
+  // Inclui todos os lançamentos independente de origem (importacao, manual, asaas_webhook, ofx_sicredi, especie)
+  const todos = await prisma.lancamentoEmpresa.findMany({
+    where: { contaEmpresaId, mes, ano, previsto: false },
   })
-
-  const manuais = await prisma.lancamentoEmpresa.findMany({
-    where: { contaEmpresaId, mes, ano, previsto: false, origem: 'manual' },
-  })
-
-  const todos = [...lancamentosImportados, ...manuais]
 
   const d = (v: any) => Number(v ?? 0)
   const soma = (tipo: string, subtipo?: string) =>
