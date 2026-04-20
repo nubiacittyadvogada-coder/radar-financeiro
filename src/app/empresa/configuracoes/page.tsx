@@ -14,6 +14,7 @@ export default function EmpresaConfiguracoesPage() {
   const [erro, setErro] = useState('')
   const [testando, setTestando] = useState(false)
   const [testeMsg, setTesteMsg] = useState('')
+  const [testandoLembrete, setTestandoLembrete] = useState(false)
   const [configurandoWebhook, setConfigurandoWebhook] = useState(false)
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [formFunc, setFormFunc] = useState({ nome: '', email: '', senha: '' })
@@ -119,6 +120,25 @@ export default function EmpresaConfiguracoesPage() {
     }
   }
 
+  async function testarLembrete() {
+    if (!token) return
+    setTestandoLembrete(true)
+    setTesteMsg('')
+    try {
+      const res = await fetch('/api/v2/empresa/zapi/testar-lembrete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setTesteMsg(`✅ ${data.mensagem} (via ${data.instancia})`)
+    } catch (err: any) {
+      setTesteMsg('❌ ' + err.message)
+    } finally {
+      setTestandoLembrete(false)
+    }
+  }
+
   async function configurarWebhook() {
     if (!token) return
     setConfigurandoWebhook(true)
@@ -152,6 +172,8 @@ export default function EmpresaConfiguracoesPage() {
     if (!payload.asaasApiKey) delete payload.asaasApiKey
     if (!payload.zapiToken) delete payload.zapiToken
     if (!payload.zapiClientToken) delete payload.zapiClientToken
+    if (!payload.zapiTokenCobranca) delete payload.zapiTokenCobranca
+    if (!payload.zapiClientTokenCobranca) delete payload.zapiClientTokenCobranca
     if (payload.metaReceita) payload.metaReceita = Number(payload.metaReceita)
     if (payload.metaLucro) payload.metaLucro = Number(payload.metaLucro)
     if (payload.cobrancaDescontoMax) payload.cobrancaDescontoMax = Number(payload.cobrancaDescontoMax)
@@ -421,25 +443,32 @@ export default function EmpresaConfiguracoesPage() {
         {erro && <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm">{erro}</div>}
         {sucesso && <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm">Configurações salvas!</div>}
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={testarWhatsApp}
             disabled={testando}
-            className="flex-1 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50"
+            className="flex-1 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50 text-sm"
           >
-            {testando ? 'Enviando...' : '📱 Testar WhatsApp'}
+            {testando ? 'Enviando...' : '📱 Testar Z-API'}
+          </button>
+          <button
+            onClick={testarLembrete}
+            disabled={testandoLembrete}
+            className="flex-1 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 disabled:opacity-50 text-sm"
+          >
+            {testandoLembrete ? 'Enviando...' : '🔔 Testar Lembrete'}
           </button>
           <button
             onClick={configurarWebhook}
             disabled={configurandoWebhook}
-            className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50"
+            className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50 text-sm"
           >
             {configurandoWebhook ? 'Configurando...' : '🤖 Ativar IA Cobrança'}
           </button>
           <button
             onClick={salvar}
             disabled={salvando}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 text-sm"
           >
             {salvando ? 'Salvando...' : 'Salvar configurações'}
           </button>
