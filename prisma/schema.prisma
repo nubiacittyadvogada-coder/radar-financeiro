@@ -289,10 +289,15 @@ model ContaEmpresa {
   // Advbox (integração com clientes/processos)
   advboxApiKey String? // chave da API Advbox para sincronizar clientes
 
-  // Z-API (WhatsApp)
+  // Z-API Jurídico (alertas internos, DRE, resumos para Núbia)
   zapiInstanceId  String?
   zapiToken       String?
   zapiClientToken String?
+
+  // Z-API Cobrança (mensagens para clientes/devedores) — fallback para o jurídico se vazio
+  zapiInstanceIdCobranca  String?
+  zapiTokenCobranca       String?
+  zapiClientTokenCobranca String?
 
   // Configurações régua de cobrança
   cobrancaDescontoMax  Decimal? @db.Decimal(5, 2) // % máximo de desconto para acordo

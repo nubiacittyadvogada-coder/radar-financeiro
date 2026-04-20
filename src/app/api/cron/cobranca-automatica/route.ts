@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
         // ── Alerta interno: cobranças com 5+ dias em atraso ────────────────
         if (!empresa.telefoneAlerta || !empresa.alertaAtivo) continue
 
-        const zapi = getZApiClient(empresa)
+        // Alerta interno para Núbia → instância jurídica
+        const zapi = getZApiClient(empresa, 'juridico')
         if (!zapi) continue
 
         const limite5dias = new Date(hoje)

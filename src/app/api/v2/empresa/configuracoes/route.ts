@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
       asaasApiKey: conta.asaasApiKey ? '***' + conta.asaasApiKey.slice(-4) : null,
       zapiToken: conta.zapiToken ? '***' + conta.zapiToken.slice(-4) : null,
       zapiClientToken: conta.zapiClientToken ? '***' + conta.zapiClientToken.slice(-4) : null,
+      zapiTokenCobranca: conta.zapiTokenCobranca ? true : null,       // só indica se está configurado
+      zapiClientTokenCobranca: conta.zapiClientTokenCobranca ? true : null,
     })
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })
@@ -33,7 +35,9 @@ export async function PATCH(req: NextRequest) {
     // Apenas campos permitidos
     const permitidos = [
       'nomeEmpresa', 'cnpj', 'setor', 'telefoneAlerta', 'alertaAtivo', 'chavePix',
-      'asaasAtivo', 'asaasApiKey', 'zapiInstanceId', 'zapiToken', 'zapiClientToken',
+      'asaasAtivo', 'asaasApiKey',
+      'zapiInstanceId', 'zapiToken', 'zapiClientToken',
+      'zapiInstanceIdCobranca', 'zapiTokenCobranca', 'zapiClientTokenCobranca',
       'cobrancaDescontoMax', 'cobrancaParcelasMax', 'metaLucro', 'metaReceita',
     ]
     // Campos numéricos opcionais — string vazia vira null

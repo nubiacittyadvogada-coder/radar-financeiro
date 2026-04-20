@@ -233,10 +233,10 @@ export async function executarCobrancaDevedor(cobrancaId: string) {
     linkPagamento
   )
 
-  // Envia via Z-API
+  // Envia via Z-API Cobrança (fallback para Jurídico se não configurado)
   let enviado = false
   if (clienteDevedor.telefone) {
-    const zapi = getZApiClient(contaEmpresa)
+    const zapi = getZApiClient(contaEmpresa, 'cobranca')
     if (zapi) {
       enviado = await zapi.enviarTexto(clienteDevedor.telefone, mensagem)
     }

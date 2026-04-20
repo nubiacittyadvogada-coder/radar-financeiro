@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
 
       if (!clienteDevedor.telefone) continue
 
-      const zapi = getZApiClient(contaEmpresa)
+      // Lembretes para clientes → instância de cobrança (fallback para jurídico)
+      const zapi = getZApiClient(contaEmpresa, 'cobranca')
       if (!zapi) continue
 
       const dataVenc = new Date(cobranca.vencimento).toLocaleDateString('pt-BR')

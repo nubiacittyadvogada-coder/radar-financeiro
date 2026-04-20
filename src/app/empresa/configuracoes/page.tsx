@@ -53,6 +53,9 @@ export default function EmpresaConfiguracoesPage() {
         zapiInstanceId: data.zapiInstanceId || '',
         zapiToken: '',
         zapiClientToken: '',
+        zapiInstanceIdCobranca: data.zapiInstanceIdCobranca || '',
+        zapiTokenCobranca: '',
+        zapiClientTokenCobranca: '',
         cobrancaDescontoMax: data.cobrancaDescontoMax || '',
         cobrancaParcelasMax: data.cobrancaParcelasMax || '',
       })
@@ -299,6 +302,52 @@ export default function EmpresaConfiguracoesPage() {
               placeholder="Cole o novo client token para atualizar"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
             />
+          </div>
+          <div className="pt-2 border-t">
+            <p className="text-xs text-gray-500 bg-blue-50 rounded px-3 py-2">
+              💡 A instância acima é a <strong>Jurídica</strong> — usada para alertas internos, DRE e resumos enviados a você.
+            </p>
+          </div>
+        </div>
+
+        {/* Z-API Cobrança */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border space-y-4">
+          <h2 className="font-semibold text-gray-800">Z-API Cobrança (WhatsApp)</h2>
+          <p className="text-sm text-gray-500">
+            Número dedicado para mensagens aos clientes/devedores (lembretes de honorários, cobranças).
+            Se não configurado, usa o número jurídico como fallback.
+          </p>
+          {inp('Instance ID', 'zapiInstanceIdCobranca', 'text', 'Ex: A1B2C3D4E5F6...')}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Token
+              {config?.zapiTokenCobranca && <span className="ml-2 text-xs text-gray-400">(configurado ✓)</span>}
+            </label>
+            <input
+              type="password"
+              value={form.zapiTokenCobranca}
+              onChange={(e) => setForm({ ...form, zapiTokenCobranca: e.target.value })}
+              placeholder="Cole o novo token para atualizar"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Client Token
+              {config?.zapiClientTokenCobranca && <span className="ml-2 text-xs text-gray-400">(configurado ✓)</span>}
+            </label>
+            <input
+              type="password"
+              value={form.zapiClientTokenCobranca}
+              onChange={(e) => setForm({ ...form, zapiClientTokenCobranca: e.target.value })}
+              placeholder="Cole o novo client token para atualizar"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+            />
+          </div>
+          <div className="pt-2 border-t">
+            <p className="text-xs text-gray-500 bg-orange-50 rounded px-3 py-2">
+              💡 Esta é a instância de <strong>Cobrança</strong> — usada para lembretes de honorários e mensagens automáticas para clientes.
+            </p>
           </div>
         </div>
 

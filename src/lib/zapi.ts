@@ -103,13 +103,32 @@ export class ZApiClient {
 }
 
 /**
- * Cria cliente Z-API a partir das env vars de uma ContaEmpresa.
+ * Cria cliente Z-API a partir dos campos de uma ContaEmpresa.
+ *
+ * @param tipo 'juridico' (padrão) — alertas internos, DRE, resumos para a sócia
+ *             'cobranca'          — mensagens para clientes/devedores
+ *             Se 'cobranca' não estiver configurado, usa fallback para 'juridico'.
  */
-export function getZApiClient(conta: {
-  zapiInstanceId?: string | null
-  zapiToken?: string | null
-  zapiClientToken?: string | null
-}): ZApiClient | null {
+export function getZApiClient(
+  conta: {
+    zapiInstanceId?: string | null
+    zapiToken?: string | null
+    zapiClientToken?: string | null
+    zapiInstanceIdCobranca?: string | null
+    zapiTokenCobranca?: string | null
+    zapiClientTokenCobranca?: string | null
+  },
+  tipo: 'juridico' | 'cobranca' = 'juridico'
+): ZApiClient | null {
+  if (tipo === 'cobranca') {
+    // Prefere a instância de cobrança; se não configurada faz fallback para jurídico
+    const instanceId = conta.zapiInstanceIdCobranca || conta.zapiInstanceId
+    const token = conta.zapiTokenCobranca || conta.zapiToken
+    const clientToken = conta.zapiClientTokenCobranca || conta.zapiClientToken
+    if (!instanceId || !token || !clientToken) return null
+    return new ZApiClient(instanceId, token, clientToken)
+  }
+  // Jurídico (padrão)
   if (!conta.zapiInstanceId || !conta.zapiToken || !conta.zapiClientToken) return null
   return new ZApiClient(conta.zapiInstanceId, conta.zapiToken, conta.zapiClientToken)
 }
