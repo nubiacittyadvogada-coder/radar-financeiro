@@ -174,14 +174,20 @@ type Classificacao = {
 /**
  * @param descricao MEMO da transação
  * @param cnpjCpf CPF ou CNPJ extraído do MEMO
- * @param isCliente true se cnpjCpf pertence a um clienteDevedor — classifica como repasse de êxito
+ * @param tipoVinculo 'cliente' | 'parceiro' | 'funcionario' | null — determina plano de conta do repasse
  */
-function classificarDebito(descricao: string, cnpjCpf: string | null, isCliente = false): Classificacao {
+function classificarDebito(descricao: string, cnpjCpf: string | null, tipoVinculo: string | null = null): Classificacao {
   const d = descricao.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
-  // Repasse de êxito para cliente (CPF/CNPJ identificado como clienteDevedor)
-  if (isCliente) {
+  // Repasse para cliente ou parceiro advogado
+  if (tipoVinculo === 'cliente') {
     return { planoConta: '03_CSP.REPASSE DE ÊXITO', tipo: 'custo_direto', subtipo: 'repasse_exito', grupoConta: 'Despesas' }
+  }
+  if (tipoVinculo === 'parceiro') {
+    return { planoConta: '03_CSP.REPASSE ADVOGADO PARCEIRO', tipo: 'custo_direto', subtipo: 'repasse_parceiro', grupoConta: 'Despesas' }
+  }
+  if (tipoVinculo === 'funcionario') {
+    return { planoConta: '04_PES.SALÁRIOS E HONORÁRIOS', tipo: 'pessoal', subtipo: 'salarios', grupoConta: 'Despesas' }
   }
 
   // Aplicação financeira
@@ -336,14 +342,14 @@ export async function POST(req: NextRequest) {
 
     const novas = liquidas.filter(t => !fitidsJaImportados.has(t.fitid))
 
-    // 6) Busca clientes para casar CPF/CNPJ (créditos E débitos)
+    // 6) Busca clientes/parceiros/funcionários para casar CPF/CNPJ (créditos E débitos)
     const clientes = await prisma.clienteDevedor.findMany({
       where: { contaEmpresaId: conta.id, cpfCnpj: { not: null } },
-      select: { id: true, nome: true, cpfCnpj: true },
+      select: { id: true, nome: true, cpfCnpj: true, tipoVinculo: true },
     })
-    const indiceCpfCnpj: Record<string, { id: string; nome: string }> = {}
+    const indiceCpfCnpj: Record<string, { id: string; nome: string; tipoVinculo: string }> = {}
     for (const c of clientes) {
-      if (c.cpfCnpj) indiceCpfCnpj[c.cpfCnpj.replace(/\D/g, '')] = { id: c.id, nome: c.nome }
+      if (c.cpfCnpj) indiceCpfCnpj[c.cpfCnpj.replace(/\D/g, '')] = { id: c.id, nome: c.nome, tipoVinculo: c.tipoVinculo }
     }
 
     // 7) Conta lancamentos asaas_webhook não conciliados (para mostrar no preview)
@@ -382,8 +388,8 @@ export async function POST(req: NextRequest) {
           subtipo: cls.subtipo,
         }
       } else {
-        const isCliente = !!(t.cnpjCpf && indiceCpfCnpj[t.cnpjCpf])
-        const cls = classificarDebito(t.descricao, t.cnpjCpf, isCliente)
+        const vinculo = t.cnpjCpf ? (indiceCpfCnpj[t.cnpjCpf] || null) : null
+        const cls = classificarDebito(t.descricao, t.cnpjCpf, vinculo?.tipoVinculo || null)
         return {
           fitid: t.fitid,
           tipo: 'despesa',
@@ -391,7 +397,8 @@ export async function POST(req: NextRequest) {
           valor: t.valor,
           descricao: t.descricao,
           cnpjCpf: t.cnpjCpf,
-          clienteNome: isCliente ? indiceCpfCnpj[t.cnpjCpf!]!.nome : null,
+          clienteNome: vinculo?.nome || null,
+          tipoVinculo: vinculo?.tipoVinculo || null,
           planoConta: cls.planoConta,
           grupoConta: cls.grupoConta,
           tipoLancamento: cls.tipo,
@@ -403,7 +410,7 @@ export async function POST(req: NextRequest) {
     const totalCreditos = transacoes.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
     const totalDebitos = transacoes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
     const creditosComCliente = transacoes.filter(t => t.tipo === 'receita' && t.clienteNome).length
-    const repassesClientes = transacoes.filter(t => t.subtipo === 'repasse_exito').length
+    const repassesClientes = transacoes.filter(t => t.subtipo === 'repasse_exito' || t.subtipo === 'repasse_parceiro').length
     const ignorados = bruto.length - transferenciasAsaas.length - semIgnorados.length
     const devolucoesNeteadas = (semIgnorados.length - liquidas.length) / 2
     const jaImportados = liquidas.length - novas.length

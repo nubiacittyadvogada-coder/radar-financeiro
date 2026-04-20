@@ -286,6 +286,9 @@ model ContaEmpresa {
   asaasApiKey  String? // chave da conta Asaas do usuário
   asaasWebhook String? // URL do webhook configurado no Asaas
 
+  // Advbox (integração com clientes/processos)
+  advboxApiKey String? // chave da API Advbox para sincronizar clientes
+
   // Z-API (WhatsApp)
   zapiInstanceId  String?
   zapiToken       String?
@@ -488,6 +491,9 @@ model ClienteDevedor {
   email           String?
   telefone        String?      // WhatsApp para cobrança
   asaasCustomerId String?      // ID do cliente no Asaas
+
+  // Tipo do vínculo (classifica repasses no OFX)
+  tipoVinculo String @default("cliente") // 'cliente' | 'parceiro' | 'funcionario'
 
   // Perfil do devedor
   perfilDevedor String @default("primeiro_atraso") // 'primeiro_atraso' | 'segundo_atraso' | 'recorrente' | 'longo_prazo'

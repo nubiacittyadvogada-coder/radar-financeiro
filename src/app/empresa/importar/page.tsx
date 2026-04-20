@@ -41,6 +41,9 @@ export default function EmpresaImportarPage() {
   const [confirmandoOfx, setConfirmandoOfx] = useState(false)
   const [previewAsaasOfx, setPreviewAsaasOfx] = useState<any | null>(null)
   const [confirmandoAsaasOfx, setConfirmandoAsaasOfx] = useState(false)
+  const [limpandoOfx, setLimpandoOfx] = useState(false)
+  const [mesReset, setMesReset] = useState(() => new Date().getMonth() + 1)
+  const [anoReset, setAnoReset] = useState(() => new Date().getFullYear())
 
   const receitasRef = useRef<HTMLInputElement>(null)
   const despesasRef = useRef<HTMLInputElement>(null)
@@ -580,6 +583,27 @@ export default function EmpresaImportarPage() {
     }
   }
 
+  async function limparOFX() {
+    if (!token) return
+    const confirma = confirm(`Apagar todos os lançamentos OFX Sicredi de ${MESES[mesReset]} ${anoReset}? Esta ação não pode ser desfeita.`)
+    if (!confirma) return
+    setLimpandoOfx(true)
+    setErro('')
+    try {
+      const res = await fetch(`/api/v2/empresa/lancamentos/reset-ofx?mes=${mesReset}&ano=${anoReset}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setSucesso(`OFX limpo: ${data.deletados} lançamentos removidos${data.asaasResetados > 0 ? ` · ${data.asaasResetados} pagamentos Asaas prontos para nova conciliação` : ''}. Agora reimporte o extrato.`)
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setLimpandoOfx(false)
+    }
+  }
+
   function gerarPreview(lancamentos: any[], tipo: string) {
     const por_mes: Record<string, number> = {}
     lancamentos.forEach(l => {
@@ -757,7 +781,8 @@ export default function EmpresaImportarPage() {
                         ? <><strong className="text-gray-900">{t.clienteNome}</strong><span className="text-gray-400 ml-1">— {t.descricao.slice(0, 30)}</span></>
                         : <span className="text-gray-700">{t.descricao}</span>
                       }
-                      {t.subtipo === 'repasse_exito' && <span className="ml-1 text-orange-500">(repasse)</span>}
+                      {t.subtipo === 'repasse_exito' && <span className="ml-1 text-orange-500">(repasse cliente)</span>}
+                      {t.subtipo === 'repasse_parceiro' && <span className="ml-1 text-purple-500">(repasse parceiro)</span>}
                     </div>
                     <span className="text-gray-400 shrink-0">{t.data}</span>
                   </div>
@@ -933,6 +958,35 @@ export default function EmpresaImportarPage() {
                   {loading && tipoImport === 'ofx' ? '⏳ Lendo...' : '📂 OFX Sicredi'}
                 </button>
                 <input ref={ofxRef} type="file" accept=".ofx,.qfx,.txt" className="hidden" onChange={processarOfx} />
+                {/* Limpar OFX */}
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs text-gray-400 mb-2">Reimportar mês incorreto:</p>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={mesReset}
+                      onChange={e => setMesReset(Number(e.target.value))}
+                      className="text-xs border rounded px-1.5 py-1 text-gray-600 bg-white"
+                    >
+                      {Object.entries(MESES).filter(([k]) => Number(k) > 0).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={anoReset}
+                      onChange={e => setAnoReset(Number(e.target.value))}
+                      className="text-xs border rounded px-1.5 py-1 text-gray-600 bg-white w-20"
+                      min={2020} max={2030}
+                    />
+                    <button
+                      onClick={limparOFX}
+                      disabled={limpandoOfx}
+                      className="text-xs px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {limpandoOfx ? 'Apagando...' : '🗑️ Limpar OFX'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
