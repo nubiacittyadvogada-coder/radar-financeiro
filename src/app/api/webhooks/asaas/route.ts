@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
               statusPg: 'pago',
               formaPagamento: 'PIX/Boleto',
               banco: 'ASAAS',
-              conciliado: true,
+              conciliado: false, // aguarda confirmação pelo extrato bancário (OFX Sicredi)
               observacoes: refObservacao,
             },
           })

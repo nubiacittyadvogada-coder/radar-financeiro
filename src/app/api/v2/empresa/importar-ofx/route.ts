@@ -8,8 +8,9 @@
  * - DEVOLUCAO PIX → cancela com PAGAMENTO correspondente (mesmo CNPJ + valor + dia)
  * - APLIC.FINANC.AVISO PREVIO → 10_APL.APLICAÇÃO FINANCEIRA
  * - LIQUIDACAO DE PARCELA → 09_EMP.PAGAMENTO EMPRÉSTIMO
- * - Próprio CNPJ (40993929000183) em crédito → transferência interna, ignora
+ * - Próprio CNPJ (40993929000183) em crédito → transferência do Asaas, separa para conciliação
  * - TED TRIBUNAL → 01_RPS.ÊXITO
+ * - Débito para CPF de clienteDevedor → 03_CSP.REPASSE DE ÊXITO
  */
 
 import { NextRequest } from 'next/server'
@@ -22,6 +23,7 @@ export const maxDuration = 30
 
 interface OFXTransacao {
   fitid: string
+  trntype: string        // CREDIT, DEBIT, FEE, XFER, etc.
   tipo: 'credito' | 'debito'
   data: string           // YYYY-MM-DD
   valor: number          // sempre positivo
@@ -80,6 +82,7 @@ function parsearOFX(conteudo: string): OFXTransacao[] {
     if (isNaN(trnamt) || trnamt === 0) continue
 
     const fitid = extrairTag(bloco, 'FITID') || extrairTag(bloco, 'REFNUM') || String(Date.now() + Math.random())
+    const trntype = extrairTag(bloco, 'TRNTYPE').toUpperCase() || (trnamt > 0 ? 'CREDIT' : 'DEBIT')
     const dtposted = extrairTag(bloco, 'DTPOSTED')
     const memo = extrairTag(bloco, 'MEMO') || extrairTag(bloco, 'NAME') || ''
     const data = parsearDataOFX(dtposted)
@@ -88,6 +91,7 @@ function parsearOFX(conteudo: string): OFXTransacao[] {
 
     transacoes.push({
       fitid,
+      trntype,
       tipo,
       data,
       valor: Math.abs(trnamt),
@@ -102,21 +106,24 @@ function parsearOFX(conteudo: string): OFXTransacao[] {
 
 // ─── Filtros e regras Sicredi ─────────────────────────────────────────────────
 
-// CNPJ da própria empresa — créditos deste CNPJ são transferências internas
+// CNPJ da própria empresa — créditos deste CNPJ são transferências do Asaas para o Sicredi
 const CNPJ_PROPRIO = '40993929000183'
 
+// Retorna true para entradas que devem ser completamente ignoradas (fatura cartão, etc.)
 function deveIgnorar(t: OFXTransacao): boolean {
   const d = t.descricao.toUpperCase()
-  // Fatura cartão (crédito = devolução de fatura paga, débito = pagamento da fatura)
   if (d.includes('SICREDI DEBITO MASTER')) return true
   if (d.includes('SICREDI ANTEC MASTER')) return true
   if (d.includes('DEB.CTA.FATURA')) return true
   if (d.includes('DEBITO MASTER')) return true
   if (d.includes('PAGTO FATURA')) return true
   if (d.includes('FAT CARTAO')) return true
-  // Crédito recebido do próprio CNPJ = transferência interna
-  if (t.tipo === 'credito' && t.cnpjCpf === CNPJ_PROPRIO) return true
   return false
+}
+
+// Identifica transferências do Asaas para o Sicredi (crédito do CNPJ próprio)
+function isTransferenciaAsaas(t: OFXTransacao): boolean {
+  return t.tipo === 'credito' && t.cnpjCpf === CNPJ_PROPRIO
 }
 
 function isDevoulucao(t: OFXTransacao): boolean {
@@ -132,7 +139,6 @@ function netearDevolucoes(ts: OFXTransacao[]): OFXTransacao[] {
     if (usados.has(t.fitid)) continue
 
     if (isDevoulucao(t) && t.tipo === 'credito') {
-      // Procura o pagamento correspondente (mesmo CNPJ, mesmo valor, mesma data)
       const par = ts.find(p =>
         !usados.has(p.fitid) &&
         p.tipo === 'debito' &&
@@ -144,7 +150,7 @@ function netearDevolucoes(ts: OFXTransacao[]): OFXTransacao[] {
       if (par) {
         usados.add(t.fitid)
         usados.add(par.fitid)
-        continue // cancela os dois
+        continue
       }
     }
 
@@ -163,15 +169,25 @@ type Classificacao = {
   grupoConta: string
 }
 
-function classificarDebito(descricao: string, cnpjCpf: string | null): Classificacao {
+/**
+ * @param descricao MEMO da transação
+ * @param cnpjCpf CPF ou CNPJ extraído do MEMO
+ * @param isCliente true se cnpjCpf pertence a um clienteDevedor — classifica como repasse de êxito
+ */
+function classificarDebito(descricao: string, cnpjCpf: string | null, isCliente = false): Classificacao {
   const d = descricao.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  // Repasse de êxito para cliente (CPF/CNPJ identificado como clienteDevedor)
+  if (isCliente) {
+    return { planoConta: '03_CSP.REPASSE DE ÊXITO', tipo: 'custo_direto', subtipo: 'repasse_exito', grupoConta: 'Despesas' }
+  }
 
   // Aplicação financeira
   if (d.includes('APLIC.FINANC') || d.includes('APLICACAO FINANC') || d.includes('APLIC FINANC'))
     return { planoConta: '10_APL.APLICAÇÃO FINANCEIRA', tipo: 'aplicacao', subtipo: 'aplicacao', grupoConta: 'Despesas' }
 
   // Parcela de empréstimo
-  if (d.includes('LIQUIDACAO DE PARCELA') || d.includes('PARCELA'))
+  if (d.includes('LIQUIDACAO DE PARCELA') || (d.includes('PARCELA') && !d.includes('JUDICIAL')))
     return { planoConta: '09_EMP.PAGAMENTO EMPRÉSTIMO', tipo: 'emprestimo', subtipo: 'parcela', grupoConta: 'Despesas' }
 
   // Impostos e tributos
@@ -228,7 +244,7 @@ function classificarDebito(descricao: string, cnpjCpf: string | null): Classific
   if (d.includes('ALUGUEL') || d.includes('LOCACAO') || d.includes('IPTU') || d.includes('CONDOMINIO') || d.includes('LLA MPA'))
     return { planoConta: '04_GER.ALUGUEL', tipo: 'geral', subtipo: 'aluguel', grupoConta: 'Despesas' }
 
-  // Consórcio / investimento especial
+  // Consórcio
   if (d.includes('CONSORCIO'))
     return { planoConta: '10_APL.CONSÓRCIO', tipo: 'aplicacao', subtipo: 'consorcio', grupoConta: 'Despesas' }
 
@@ -240,10 +256,8 @@ function classificarDebito(descricao: string, cnpjCpf: string | null): Classific
   if (d.includes('HOTEL') || d.includes('HOSPEDAGEM') || d.includes('ICH ADMINISTRACAO'))
     return { planoConta: '04_GER.VIAGENS E DESLOCAMENTO', tipo: 'geral', subtipo: 'viagens', grupoConta: 'Despesas' }
 
-  // Repasse de êxito / terceiros (pagamentos com valor alto a pessoas físicas)
-  // Heurística: se parece pessoa física (CPF 11 dígitos) e valor > R$1.000 → provavelmente pessoal
+  // Pessoa física (CPF) não identificada como cliente → provavelmente funcionário/prestador
   if (cnpjCpf && cnpjCpf.length === 11) {
-    // Pessoa física — pode ser pessoal, repasse ou prestador
     return { planoConta: '04_PES.SALÁRIOS E HONORÁRIOS', tipo: 'pessoal', subtipo: 'salarios', grupoConta: 'Despesas' }
   }
 
@@ -259,8 +273,8 @@ function mapearPlanoConta(t: OFXTransacao, clienteNome: string | null): Classifi
   if (d.includes('TED') && (d.includes('TRIBUNAL') || d.includes('TJ')))
     return { planoConta: '01_RPS.ÊXITO', tipo: 'receita', subtipo: 'exito', grupoConta: 'Receitas' }
 
-  // Transferência via SICREDI interno com nome do cliente
-  if (d.includes('RECEBIMENTO PIX SICREDI'))
+  // PIX identificado com cliente = honorário mensal
+  if (clienteNome)
     return { planoConta: '01_RPS.HONORÁRIOS MENSAIS', tipo: 'receita', subtipo: 'honorario_mensal', grupoConta: 'Receitas' }
 
   // Padrão: honorários mensais
@@ -297,13 +311,16 @@ export async function POST(req: NextRequest) {
       return Response.json({ erro: 'Nenhuma transação encontrada. Verifique se o arquivo é um extrato OFX válido.' }, { status: 400 })
     }
 
-    // 2) Remove entradas que devem ser ignoradas
-    const semIgnorados = bruto.filter(t => !deveIgnorar(t))
+    // 2) Separa transferências Asaas antes de qualquer filtro
+    const transferenciasAsaas = bruto.filter(isTransferenciaAsaas)
 
-    // 3) Cancela devoluções PIX com seus pagamentos correspondentes
+    // 3) Remove entradas que devem ser ignoradas (cartão, tarifas de fatura)
+    const semIgnorados = bruto.filter(t => !deveIgnorar(t) && !isTransferenciaAsaas(t))
+
+    // 4) Cancela devoluções PIX com seus pagamentos correspondentes
     const liquidas = netearDevolucoes(semIgnorados)
 
-    // 4) FITIDs já importados (dedup por observacoes = "ofx:FITID")
+    // 5) FITIDs já importados (dedup por observacoes = "ofx:FITID")
     const fitidsExistentes = await prisma.lancamentoEmpresa.findMany({
       where: {
         contaEmpresaId: conta.id,
@@ -317,7 +334,7 @@ export async function POST(req: NextRequest) {
 
     const novas = liquidas.filter(t => !fitidsJaImportados.has(t.fitid))
 
-    // 5) Busca clientes para casar CPF/CNPJ
+    // 6) Busca clientes para casar CPF/CNPJ (créditos E débitos)
     const clientes = await prisma.clienteDevedor.findMany({
       where: { contaEmpresaId: conta.id, cpfCnpj: { not: null } },
       select: { id: true, nome: true, cpfCnpj: true },
@@ -327,11 +344,23 @@ export async function POST(req: NextRequest) {
       if (c.cpfCnpj) indiceCpfCnpj[c.cpfCnpj.replace(/\D/g, '')] = { id: c.id, nome: c.nome }
     }
 
+    // 7) Conta lancamentos asaas_webhook não conciliados (para mostrar no preview)
+    let asaasParaConciliar = 0
+    if (transferenciasAsaas.length > 0) {
+      asaasParaConciliar = await prisma.lancamentoEmpresa.count({
+        where: {
+          contaEmpresaId: conta.id,
+          origem: 'asaas_webhook',
+          conciliado: false,
+        },
+      })
+    }
+
     // Extrai período
     const datas = novas.map(t => t.data).sort()
     const periodo = datas.length > 0 ? `${datas[0]} a ${datas[datas.length - 1]}` : 'sem datas'
 
-    // 6) Enriquece e classifica
+    // 8) Enriquece e classifica
     const transacoes = novas.map(t => {
       const clienteEncontrado = t.cnpjCpf ? (indiceCpfCnpj[t.cnpjCpf] || null) : null
 
@@ -351,7 +380,8 @@ export async function POST(req: NextRequest) {
           subtipo: cls.subtipo,
         }
       } else {
-        const cls = classificarDebito(t.descricao, t.cnpjCpf)
+        const isCliente = !!(t.cnpjCpf && indiceCpfCnpj[t.cnpjCpf])
+        const cls = classificarDebito(t.descricao, t.cnpjCpf, isCliente)
         return {
           fitid: t.fitid,
           tipo: 'despesa',
@@ -359,7 +389,7 @@ export async function POST(req: NextRequest) {
           valor: t.valor,
           descricao: t.descricao,
           cnpjCpf: t.cnpjCpf,
-          clienteNome: null,
+          clienteNome: isCliente ? indiceCpfCnpj[t.cnpjCpf!]!.nome : null,
           planoConta: cls.planoConta,
           grupoConta: cls.grupoConta,
           tipoLancamento: cls.tipo,
@@ -371,7 +401,8 @@ export async function POST(req: NextRequest) {
     const totalCreditos = transacoes.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
     const totalDebitos = transacoes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
     const creditosComCliente = transacoes.filter(t => t.tipo === 'receita' && t.clienteNome).length
-    const ignorados = bruto.length - semIgnorados.length
+    const repassesClientes = transacoes.filter(t => t.subtipo === 'repasse_exito').length
+    const ignorados = bruto.length - transferenciasAsaas.length - semIgnorados.length
     const devolucoesNeteadas = (semIgnorados.length - liquidas.length) / 2
     const jaImportados = liquidas.length - novas.length
 
@@ -382,12 +413,24 @@ export async function POST(req: NextRequest) {
       totalCreditos,
       totalDebitos,
       creditosComCliente,
+      repassesClientes,
+      // Transferências Asaas → Sicredi (para conciliar na confirmação)
+      transferenciasAsaas: transferenciasAsaas.map(t => ({
+        fitid: t.fitid,
+        data: t.data,
+        valor: t.valor,
+        descricao: t.descricao,
+      })),
+      asaasParaConciliar,
       stats: {
         bruto: bruto.length,
-        ignorados,
+        ignorados,                          // fatura cartão excluída
+        transferenciasAsaas: transferenciasAsaas.length,  // Asaas→Sicredi
+        totalTransferidoAsaas: transferenciasAsaas.reduce((s, t) => s + t.valor, 0),
         devolucoesNeteadas,
         jaImportados,
         novas: novas.length,
+        asaasParaConciliar,
       },
     })
   } catch (err: any) {

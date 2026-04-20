@@ -7,7 +7,7 @@ import { calcularFechamentoEmpresa } from '@/server/lib/calcularFechamentoEmpres
 export const maxDuration = 60
 
 // POST /api/v2/empresa/importar
-// Recebe lancamentos[] já parseados pelo frontend (xlsx ou pdf), classifica e salva
+// Recebe lancamentos[] já parseados pelo frontend (xlsx, pdf, ofx), classifica e salva
 export async function POST(req: NextRequest) {
   try {
     const u = getUsuario(req)
@@ -17,23 +17,103 @@ export async function POST(req: NextRequest) {
     if (!conta) return Response.json({ erro: 'Conta empresa não encontrada' }, { status: 404 })
 
     const body = await req.json()
-    const { lancamentos, mes, ano, tipo, nomeArquivo } = body
-    // PDF e OFX têm dados reais de transação — ativam conciliação automática
+    const { lancamentos, mes, ano, tipo, nomeArquivo, transferenciasAsaas } = body
+
+    // PDF, OFX Sicredi e OFX Asaas têm dados reais de transação — ativam conciliação automática
     const isTransactionImport = tipo === 'extrato_pdf' || tipo === 'ofx_sicredi'
-    const isPdfImport = isTransactionImport // compatibilidade com lógica abaixo
+    const isPdfImport = isTransactionImport
 
     // Mapeia tipo de importação para origem do lançamento
     const origemMap: Record<string, string> = {
-      extrato_pdf: 'importacao',
-      ofx_sicredi: 'ofx_sicredi',
-      receitas: 'importacao',
-      despesas: 'importacao',
+      extrato_pdf:  'importacao',
+      ofx_sicredi:  'ofx_sicredi',
+      asaas_ofx:    'asaas_ofx',
+      receitas:     'importacao',
+      despesas:     'importacao',
     }
     const origemLancamento = origemMap[tipo] || 'importacao'
 
     if (!Array.isArray(lancamentos) || lancamentos.length === 0) {
       return Response.json({ erro: 'lancamentos[] obrigatório' }, { status: 400 })
     }
+
+    // ── Asaas OFX: fluxo separado (dedup por FITID, sem proximidade) ──────────
+    if (tipo === 'asaas_ofx') {
+      const importacao = await prisma.importacaoEmpresa.create({
+        data: {
+          contaEmpresaId: conta.id,
+          tipo: 'asaas_ofx',
+          nomeArquivo: nomeArquivo || 'extrato_asaas.ofx',
+          mes: Number(mes),
+          ano: Number(ano),
+          status: 'processando',
+          totalLinhas: lancamentos.length,
+        },
+      })
+
+      // Dedup por FITID (observacoes = "asaas_ofx:FITID")
+      const fitidsExistentes = new Set(
+        (await prisma.lancamentoEmpresa.findMany({
+          where: { contaEmpresaId: conta.id, observacoes: { startsWith: 'asaas_ofx:' } },
+          select: { observacoes: true },
+        })).map(l => l.observacoes || '')
+      )
+
+      const dados = lancamentos
+        .filter((l: any) => !fitidsExistentes.has(`asaas_ofx:${l.fitid || ''}`))
+        .map((l: any) => {
+          const dataComp = l.data ? new Date(l.data) : null
+          const mesL = dataComp ? dataComp.getUTCMonth() + 1 : Number(mes)
+          const anoL = dataComp ? dataComp.getUTCFullYear() : Number(ano)
+          return {
+            contaEmpresaId: conta.id,
+            importacaoId: importacao.id,
+            origem: 'asaas_ofx',
+            mes: mesL,
+            ano: anoL,
+            favorecido: null,
+            planoConta: String(l.planoConta || '').trim(),
+            grupoConta: String(l.grupoConta || 'Despesas').trim(),
+            tipo: String(l.tipoLancamento || 'geral'),
+            subtipo: l.subtipo || null,
+            descricao: l.descricao ? String(l.descricao).trim() : null,
+            dataCompetencia: dataComp,
+            valor: Number(l.valor),
+            statusPg: 'pago',
+            dataPagamento: dataComp,
+            formaPagamento: 'PIX',
+            banco: 'ASAAS',
+            observacoes: l.observacoes || null,
+            previsto: false,
+          }
+        })
+
+      if (dados.length > 0) {
+        await prisma.lancamentoEmpresa.createMany({ data: dados })
+      }
+      await prisma.importacaoEmpresa.update({
+        where: { id: importacao.id },
+        data: { status: 'concluido', linhasProcessadas: dados.length },
+      })
+
+      // Recalcula meses únicos afetados
+      const mesesAfetados = new Set(dados.map((d: any) => `${d.mes}-${d.ano}`))
+      for (const chave of mesesAfetados) {
+        const [m, a] = (chave as string).split('-').map(Number)
+        await calcularFechamentoEmpresa(conta.id, m, a)
+      }
+
+      const fechamento = await calcularFechamentoEmpresa(conta.id, Number(mes), Number(ano))
+      return Response.json({
+        ok: true,
+        inseridos: dados.length,
+        total: dados.length,
+        duplicatas: lancamentos.length - dados.length,
+        fechamento,
+      }, { status: 201 })
+    }
+
+    // ── Fluxo padrão (Excel, PDF, OFX Sicredi) ───────────────────────────────
 
     // Cria registro de importação
     const importacao = await prisma.importacaoEmpresa.create({
@@ -50,8 +130,6 @@ export async function POST(req: NextRequest) {
 
     // Classifica lançamentos
     const dados = lancamentos.map((l: any) => {
-      // Se o frontend já enviou tipo/grupoConta (ex: importação PDF), usa direto.
-      // Só chama o classificador para planilhas Excel que usam código P.CONTAS.
       let tipoFinal = l.tipo as string | undefined
       let subtipoFinal = l.subtipo as string | null | undefined
       let grupoContaFinal = l.grupoConta as string | undefined
@@ -95,31 +173,38 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // ── Busca lançamentos já existentes no mesmo mês/ano ───────────────────────
+    // ── Busca lançamentos já existentes no mesmo mês/ano ──────────────────────
     const jaExistentes = await prisma.lancamentoEmpresa.findMany({
       where: { contaEmpresaId: conta.id, mes: Number(mes), ano: Number(ano) },
-      select: { id: true, dataCompetencia: true, valor: true, descricao: true, statusPg: true, tipo: true, origem: true },
+      select: { id: true, dataCompetencia: true, valor: true, descricao: true, statusPg: true, tipo: true, origem: true, observacoes: true },
     })
 
-    // ids de lançamentos existentes a marcar como pago (conciliação)
     const conciliadosManualIds: string[] = []
 
+    // Para OFX Sicredi: dedup por FITID (observacoes = "ofx:FITID") tem prioridade
+    const fitidsOFXJaImportados = tipo === 'ofx_sicredi'
+      ? new Set(jaExistentes.filter(e => e.observacoes?.startsWith('ofx:')).map(e => e.observacoes!.replace('ofx:', '')))
+      : new Set<string>()
+
     const dadosFiltrados = dados.filter(d => {
-      // 1) Dedup exato por data+valor+descrição (evita importar mesmo arquivo duas vezes)
+      // Dedup por FITID (OFX Sicredi)
+      if (tipo === 'ofx_sicredi' && d.observacoes?.startsWith('ofx:')) {
+        const fitid = d.observacoes.replace('ofx:', '')
+        if (fitidsOFXJaImportados.has(fitid)) return false
+      }
+
+      // Dedup exato por data+valor+descrição (evita reimportar mesmo arquivo)
       const chaveExata = `${d.dataCompetencia?.toISOString().slice(0, 10)}|${Number(d.valor).toFixed(2)}|${(d.descricao || '').toLowerCase().trim()}`
       const duplicataExata = jaExistentes.some(e =>
         `${e.dataCompetencia?.toISOString().slice(0, 10)}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').toLowerCase().trim()}` === chaveExata
       )
       if (duplicataExata) return false
 
-      // 2) Conciliação por valor+data para QUALQUER tipo de importação
-      //    Evita duplicatas quando já existe lançamento com mesmo valor/data mas descrição diferente
-      //    (ex: manual "Aluguel" == importado "PAGAMENTO PIX - IMOBILIARIA")
+      // Conciliação por valor+data — marca lançamentos manuais como pagos
       if (d.dataCompetencia) {
         const valorD = Number(d.valor)
         const match = jaExistentes.find(e => {
           if (!e.dataCompetencia || conciliadosManualIds.includes(e.id)) return false
-          // Mesmo tipo (receita vs despesa)
           if (e.tipo !== d.tipo) return false
           const diffValor = Math.abs(Number(e.valor) - valorD) / (Math.max(valorD, Number(e.valor)) || 1)
           if (diffValor > 0.05) return false
@@ -128,7 +213,7 @@ export async function POST(req: NextRequest) {
         })
         if (match) {
           conciliadosManualIds.push(match.id)
-          return false // não cria novo lançamento — já existe um equivalente
+          return false
         }
       }
 
@@ -143,10 +228,31 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── Conciliação com Contas a Pagar ─────────────────────────────────────────
-    // Para despesas do PDF sem lançamento manual correspondente,
-    // verifica se existe uma conta a pagar que bata (valor ±5%, data ±7 dias).
-    // Se sim, marca conta como paga e não cria lançamento duplicado.
+    // ── Conciliação de lancamentos Asaas quando importando OFX Sicredi ────────
+    // As transferenciasAsaas são os créditos do CNPJ próprio no extrato Sicredi.
+    // Cada uma corresponde a uma transferência do saldo Asaas para o Sicredi.
+    // Marcamos os asaas_webhook lancamentos do período como conciliado: true.
+    let conciliadosAsaas = 0
+    if (tipo === 'ofx_sicredi' && Array.isArray(transferenciasAsaas) && transferenciasAsaas.length > 0) {
+      // Usa a data da última transferência como limite superior do período conciliado
+      const datasTransf = transferenciasAsaas.map((t: any) => t.data).sort()
+      const ultimaTransfData = datasTransf[datasTransf.length - 1]
+
+      const resultado = await prisma.lancamentoEmpresa.updateMany({
+        where: {
+          contaEmpresaId: conta.id,
+          origem: 'asaas_webhook',
+          conciliado: false,
+          mes: Number(mes),
+          ano: Number(ano),
+          dataCompetencia: { lte: new Date(ultimaTransfData + 'T23:59:59Z') },
+        },
+        data: { conciliado: true },
+      })
+      conciliadosAsaas = resultado.count
+    }
+
+    // ── Conciliação com Contas a Pagar ────────────────────────────────────────
     let conciliadosContasPagar = 0
 
     if (isPdfImport) {
@@ -164,10 +270,7 @@ export async function POST(req: NextRequest) {
       const dadosParaInserir: typeof dadosFiltrados = []
 
       for (const d of dadosFiltrados) {
-        if (d.tipo === 'receita') {
-          dadosParaInserir.push(d)
-          continue
-        }
+        if (d.tipo === 'receita') { dadosParaInserir.push(d); continue }
         const valorD = Number(d.valor)
         const dataD = d.dataCompetencia
 
@@ -184,14 +287,10 @@ export async function POST(req: NextRequest) {
         if (match) {
           contasPagasIds.push(match.id)
           conciliadosContasPagar++
-          // Cria lançamento mesmo assim para o DRE registrar a despesa
-          dadosParaInserir.push(d)
-        } else {
-          dadosParaInserir.push(d)
         }
+        dadosParaInserir.push(d)
       }
 
-      // Atualiza contas a pagar reconciliadas
       if (contasPagasIds.length > 0) {
         await prisma.contaPagarEmpresa.updateMany({
           where: { id: { in: contasPagasIds } },
@@ -215,6 +314,7 @@ export async function POST(req: NextRequest) {
         duplicatas: dados.length - dadosFiltrados.length,
         conciliadosManual: conciliadosManualIds.length,
         conciliadosContasPagar,
+        conciliadosAsaas,
         fechamento,
       }, { status: 201 })
     }
@@ -234,6 +334,7 @@ export async function POST(req: NextRequest) {
       total: dadosFiltrados.length,
       inseridos: dadosFiltrados.length,
       duplicatas: dados.length - dadosFiltrados.length,
+      conciliadosAsaas,
       fechamento,
     }, { status: 201 })
   } catch (err: any) {

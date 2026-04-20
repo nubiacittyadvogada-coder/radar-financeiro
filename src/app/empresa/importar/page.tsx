@@ -39,12 +39,15 @@ export default function EmpresaImportarPage() {
   const [confirmandoPdf, setConfirmandoPdf] = useState(false)
   const [previewOfx, setPreviewOfx] = useState<any | null>(null)
   const [confirmandoOfx, setConfirmandoOfx] = useState(false)
+  const [previewAsaasOfx, setPreviewAsaasOfx] = useState<any | null>(null)
+  const [confirmandoAsaasOfx, setConfirmandoAsaasOfx] = useState(false)
 
   const receitasRef = useRef<HTMLInputElement>(null)
   const despesasRef = useRef<HTMLInputElement>(null)
   const contasRef = useRef<HTMLInputElement>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
   const ofxRef = useRef<HTMLInputElement>(null)
+  const asaasOfxRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -462,6 +465,7 @@ export default function EmpresaImportarPage() {
           valor: t.valor,
           data: t.data,
           pago: true,
+          observacoes: t.fitid ? `ofx:${t.fitid}` : undefined,
           mes,
           ano,
         })
@@ -470,22 +474,32 @@ export default function EmpresaImportarPage() {
       let totalImportado = 0
       let totalDuplicatas = 0
       let totalConciliados = 0
+      let totalConciliadosAsaas = 0
       for (const [k, lans] of Object.entries(porMes)) {
         const [mes, ano] = k.split('-').map(Number)
         const res = await fetch('/api/v2/empresa/importar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ lancamentos: lans, mes, ano, tipo: 'ofx_sicredi', nomeArquivo: `extrato_sicredi_${previewOfx.periodo}` }),
+          body: JSON.stringify({
+            lancamentos: lans,
+            mes, ano,
+            tipo: 'ofx_sicredi',
+            nomeArquivo: `extrato_sicredi_${previewOfx.periodo}`,
+            // Passa as transferências Asaas→Sicredi para conciliar os webhook lancamentos
+            transferenciasAsaas: previewOfx.transferenciasAsaas || [],
+          }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.erro)
         totalImportado += data.inseridos ?? data.total ?? lans.length
         totalDuplicatas += data.duplicatas ?? 0
         totalConciliados += (data.conciliadosManual ?? 0) + (data.conciliadosContasPagar ?? 0)
+        totalConciliadosAsaas += data.conciliadosAsaas ?? 0
       }
 
       setPreviewOfx(null)
       const partes = [`${totalImportado} lançamentos importados`]
+      if (totalConciliadosAsaas > 0) partes.push(`${totalConciliadosAsaas} pagamento(s) Asaas confirmados no banco`)
       if (totalConciliados > 0) partes.push(`${totalConciliados} conciliado(s) como pago`)
       if (totalDuplicatas > 0) partes.push(`${totalDuplicatas} duplicata(s) ignorada(s)`)
       setSucesso(partes.join(' · ') + '!')
@@ -493,6 +507,76 @@ export default function EmpresaImportarPage() {
       setErro(err.message)
     } finally {
       setConfirmandoOfx(false)
+    }
+  }
+
+  async function processarAsaasOfx(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !token) return
+    setErro(''); setSucesso(null); setPreviewAsaasOfx(null); setLoading(true); setTipoImport('ofx')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/v2/empresa/importar-asaas-ofx', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setPreviewAsaasOfx(data)
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setLoading(false)
+      if (asaasOfxRef.current) asaasOfxRef.current.value = ''
+    }
+  }
+
+  async function confirmarAsaasOfx() {
+    if (!previewAsaasOfx || !token) return
+    setConfirmandoAsaasOfx(true)
+    setErro('')
+    try {
+      // Agrupa por mês
+      const porMes: Record<string, any[]> = {}
+      for (const t of previewAsaasOfx.lancamentos) {
+        const data = new Date(t.data)
+        const mes = data.getUTCMonth() + 1
+        const ano = data.getUTCFullYear()
+        const k = `${mes}-${ano}`
+        if (!porMes[k]) porMes[k] = []
+        porMes[k].push(t)
+      }
+
+      let totalImportado = 0
+      let totalDuplicatas = 0
+      for (const [k, lans] of Object.entries(porMes)) {
+        const [mes, ano] = k.split('-').map(Number)
+        const res = await fetch('/api/v2/empresa/importar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            lancamentos: lans,
+            mes, ano,
+            tipo: 'asaas_ofx',
+            nomeArquivo: `extrato_asaas_${previewAsaasOfx.periodo}`,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.erro)
+        totalImportado += data.inseridos ?? data.total ?? lans.length
+        totalDuplicatas += data.duplicatas ?? 0
+      }
+
+      setPreviewAsaasOfx(null)
+      const partes = [`${totalImportado} lançamentos Asaas importados`]
+      if (totalDuplicatas > 0) partes.push(`${totalDuplicatas} já existentes ignorados`)
+      setSucesso(partes.join(' · ') + '!')
+    } catch (err: any) {
+      setErro(err.message)
+    } finally {
+      setConfirmandoAsaasOfx(false)
     }
   }
 
@@ -635,19 +719,32 @@ export default function EmpresaImportarPage() {
           </div>
         )}
 
-        {/* Preview OFX */}
+        {/* Preview OFX Sicredi */}
         {previewOfx && (
           <div className="bg-white rounded-xl border shadow-sm p-5">
             <h2 className="font-semibold text-gray-900 mb-1">
               🏦 Extrato {previewOfx.banco} — {previewOfx.periodo}
             </h2>
-            <div className="flex gap-4 text-sm text-gray-600 mb-3">
+            <div className="flex flex-wrap gap-3 text-sm mb-3">
               <span className="text-green-600 font-medium">↑ {previewOfx.transacoes.filter((t: any) => t.tipo === 'receita').length} créditos</span>
               <span className="text-red-500 font-medium">↓ {previewOfx.transacoes.filter((t: any) => t.tipo === 'despesa').length} débitos</span>
               {previewOfx.creditosComCliente > 0 && (
                 <span className="text-blue-600 font-medium">🔗 {previewOfx.creditosComCliente} clientes identificados</span>
               )}
+              {previewOfx.repassesClientes > 0 && (
+                <span className="text-orange-600 font-medium">↩ {previewOfx.repassesClientes} repasse(s) de êxito</span>
+              )}
             </div>
+            {/* Transferências Asaas */}
+            {previewOfx.transferenciasAsaas?.length > 0 && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mb-3 text-xs text-indigo-700">
+                🔄 <strong>{previewOfx.transferenciasAsaas.length} transferências Asaas</strong> identificadas
+                {' '}(total {formatarMoeda(previewOfx.stats?.totalTransferidoAsaas || 0)})
+                {previewOfx.asaasParaConciliar > 0 && (
+                  <span className="ml-1">— {previewOfx.asaasParaConciliar} pagamentos Asaas serão confirmados no banco</span>
+                )}
+              </div>
+            )}
             <div className="max-h-64 overflow-y-auto space-y-1 mb-4 border rounded-lg p-2">
               {previewOfx.transacoes.map((t: any, i: number) => (
                 <div key={i} className="flex items-center justify-between text-xs py-1 border-b last:border-0">
@@ -655,9 +752,13 @@ export default function EmpresaImportarPage() {
                     <span className={t.tipo === 'receita' ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>
                       {t.tipo === 'receita' ? '↑' : '↓'}
                     </span>
-                    <span className="truncate text-gray-700">
-                      {t.clienteNome ? <strong>{t.clienteNome}</strong> : t.descricao}
-                    </span>
+                    <div className="truncate">
+                      {t.clienteNome
+                        ? <><strong className="text-gray-900">{t.clienteNome}</strong><span className="text-gray-400 ml-1">— {t.descricao.slice(0, 30)}</span></>
+                        : <span className="text-gray-700">{t.descricao}</span>
+                      }
+                      {t.subtipo === 'repasse_exito' && <span className="ml-1 text-orange-500">(repasse)</span>}
+                    </div>
                     <span className="text-gray-400 shrink-0">{t.data}</span>
                   </div>
                   <span className={`font-semibold shrink-0 ml-2 ${t.tipo === 'receita' ? 'text-green-600' : 'text-red-500'}`}>
@@ -675,6 +776,65 @@ export default function EmpresaImportarPage() {
               >
                 {confirmandoOfx ? 'Importando...' : `✅ Importar ${previewOfx.transacoes.length} transações`}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Preview OFX Asaas */}
+        {previewAsaasOfx && (
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+            <h2 className="font-semibold text-gray-900 mb-1">
+              💳 Extrato Asaas — {previewAsaasOfx.periodo}
+            </h2>
+            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+              <div className="bg-gray-50 rounded-lg p-2">
+                <div className="text-gray-500">Recebimentos de clientes</div>
+                <div className="font-semibold text-gray-400">{previewAsaasOfx.stats.creditosIgnorados} ignorados (já via webhook)</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2">
+                <div className="text-gray-500">Transferências para Sicredi</div>
+                <div className="font-semibold text-gray-400">{previewAsaasOfx.stats.xfersEmpresaIgnoradas} ignoradas ({formatarMoeda(previewAsaasOfx.stats.totalTransferidoEmpresa)})</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-2">
+                <div className="text-gray-500">Taxas Asaas</div>
+                <div className="font-semibold text-red-600">{previewAsaasOfx.stats.feesNovas} novas — {formatarMoeda(previewAsaasOfx.stats.totalFees)}</div>
+              </div>
+              {previewAsaasOfx.stats.retiradasNovas > 0 && (
+                <div className="bg-orange-50 rounded-lg p-2">
+                  <div className="text-gray-500">Retiradas pessoais</div>
+                  <div className="font-semibold text-orange-600">{previewAsaasOfx.stats.retiradasNovas} — {formatarMoeda(previewAsaasOfx.stats.totalRetiradas)}</div>
+                </div>
+              )}
+            </div>
+            {previewAsaasOfx.lancamentos.length === 0 ? (
+              <p className="text-sm text-gray-500 italic mb-4">Nenhum item novo para importar (tudo já importado).</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-1 mb-4 border rounded-lg p-2">
+                {previewAsaasOfx.lancamentos.map((t: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs py-1 border-b last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={t.categoria === 'retirada' ? 'text-orange-500 font-bold' : 'text-red-500 font-bold'}>↓</span>
+                      <span className="truncate text-gray-700">{t.descricao}</span>
+                      <span className="text-gray-400 shrink-0">{t.data}</span>
+                    </div>
+                    <span className="font-semibold shrink-0 ml-2 text-red-500">
+                      R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setPreviewAsaasOfx(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600">Cancelar</button>
+              {previewAsaasOfx.lancamentos.length > 0 && (
+                <button
+                  onClick={confirmarAsaasOfx}
+                  disabled={confirmandoAsaasOfx}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {confirmandoAsaasOfx ? 'Importando...' : `✅ Importar ${previewAsaasOfx.lancamentos.length} lançamentos`}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -754,23 +914,47 @@ export default function EmpresaImportarPage() {
           </div>
         </div>
 
-        {/* Extrato OFX Sicredi */}
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-teal-100">
-          <div className="flex items-start gap-4">
-            <div className="text-3xl">🏦</div>
-            <div className="flex-1">
-              <h2 className="font-semibold text-gray-900">Extrato OFX (Sicredi / Qualquer banco)</h2>
-              <p className="text-xs text-gray-500 mt-1 mb-4">
-                Exporte o extrato em formato OFX no seu banco e importe aqui. O sistema identifica automaticamente clientes pelo CPF/CNPJ nos créditos PIX e concilia com lançamentos existentes.
-              </p>
-              <button
-                onClick={() => ofxRef.current?.click()}
-                disabled={loading}
-                className="px-5 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
-              >
-                {loading && tipoImport === 'ofx' ? '⏳ Lendo OFX...' : '📂 Importar Extrato OFX'}
-              </button>
-              <input ref={ofxRef} type="file" accept=".ofx,.qfx,.txt" className="hidden" onChange={processarOfx} />
+        {/* Extratos OFX — dois cards lado a lado */}
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* OFX Sicredi */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-teal-100">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">🏦</div>
+              <div className="flex-1">
+                <h2 className="font-semibold text-gray-900">Extrato OFX — Banco (Sicredi)</h2>
+                <p className="text-xs text-gray-500 mt-1 mb-4">
+                  Importa receitas e despesas reais. Identifica clientes pelo CPF/CNPJ, classifica repasse de êxito, e confirma no banco os pagamentos Asaas recebidos.
+                </p>
+                <button
+                  onClick={() => ofxRef.current?.click()}
+                  disabled={loading}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {loading && tipoImport === 'ofx' ? '⏳ Lendo...' : '📂 OFX Sicredi'}
+                </button>
+                <input ref={ofxRef} type="file" accept=".ofx,.qfx,.txt" className="hidden" onChange={processarOfx} />
+              </div>
+            </div>
+          </div>
+
+          {/* OFX Asaas */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-indigo-100">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">💳</div>
+              <div className="flex-1">
+                <h2 className="font-semibold text-gray-900">Extrato OFX — Asaas</h2>
+                <p className="text-xs text-gray-500 mt-1 mb-4">
+                  Importa as <strong>taxas Asaas</strong> (boleto, PIX, cartão, mensageria) como despesas e retiradas pessoais. Cobranças recebidas são ignoradas (já via webhook).
+                </p>
+                <button
+                  onClick={() => asaasOfxRef.current?.click()}
+                  disabled={loading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {loading && tipoImport === 'ofx' ? '⏳ Lendo...' : '📂 OFX Asaas'}
+                </button>
+                <input ref={asaasOfxRef} type="file" accept=".ofx,.qfx,.txt" className="hidden" onChange={processarAsaasOfx} />
+              </div>
             </div>
           </div>
         </div>
