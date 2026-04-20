@@ -13,7 +13,12 @@ export async function GET(req: NextRequest) {
       where: { contaEmpresaId: conta.id, ativo: true },
       include: {
         cobrancas: { where: { status: 'pendente' }, orderBy: { vencimento: 'asc' } },
-        _count: { select: { mensagens: true, cobrancas: true } },
+        _count: {
+          select: {
+            mensagens: true,
+            cobrancas: true,
+          },
+        },
       },
       orderBy: { totalDevido: 'desc' },
     })

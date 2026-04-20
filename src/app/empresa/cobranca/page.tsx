@@ -57,6 +57,11 @@ export default function CobrancaPage() {
   const [busca, setBusca] = useState('')
   const [sincronizando, setSincronizando] = useState(false)
   const [pausando, setPausando] = useState<string | null>(null)
+  const [showConversa, setShowConversa] = useState<string | null>(null) // devedorId
+  const [mensagensConversa, setMensagensConversa] = useState<any[]>([])
+  const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [msgEnvio, setMsgEnvio] = useState('')
+  const [enviandoMsg, setEnviandoMsg] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -219,6 +224,37 @@ export default function CobrancaPage() {
       carregarDevedores(token)
     } catch (err: any) {
       setErro(err.message)
+    }
+  }
+
+  async function abrirConversa(devedorId: string) {
+    setShowConversa(devedorId)
+    setLoadingMsgs(true)
+    setMensagensConversa([])
+    const res = await fetch(`/api/v2/empresa/devedores/${devedorId}/mensagens`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.ok) setMensagensConversa(await res.json())
+    setLoadingMsgs(false)
+  }
+
+  async function enviarMsgManual() {
+    if (!token || !showConversa || !msgEnvio.trim()) return
+    setEnviandoMsg(true)
+    try {
+      const res = await fetch(`/api/v2/empresa/devedores/${showConversa}/mensagens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mensagem: msgEnvio }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro)
+      setMsgEnvio('')
+      abrirConversa(showConversa) // recarrega
+    } catch (err: any) {
+      alert('Erro: ' + err.message)
+    } finally {
+      setEnviandoMsg(false)
     }
   }
 
@@ -524,6 +560,83 @@ export default function CobrancaPage() {
           </div>
         )}
 
+        {/* Modal de conversa WhatsApp */}
+        {showConversa && (() => {
+          const dv = devedores.find(d => d.id === showConversa)
+          return (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+                {/* Header */}
+                <div className="px-5 py-4 border-b flex items-center justify-between bg-green-600 rounded-t-2xl">
+                  <div>
+                    <div className="font-bold text-white">{dv?.nome}</div>
+                    <div className="text-xs text-green-100">{dv?.telefone || 'sem telefone'} · IA ativa</div>
+                  </div>
+                  <button onClick={() => setShowConversa(null)} className="text-white hover:text-green-200 text-xl font-bold">✕</button>
+                </div>
+                {/* Mensagens */}
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2 bg-gray-50 min-h-[300px]">
+                  {loadingMsgs ? (
+                    <div className="text-center text-gray-400 py-10">Carregando...</div>
+                  ) : mensagensConversa.length === 0 ? (
+                    <div className="text-center text-gray-400 py-10 text-sm">
+                      Nenhuma mensagem ainda.<br/>
+                      <span className="text-xs">Quando o cliente responder, as mensagens aparecerão aqui.</span>
+                    </div>
+                  ) : (
+                    mensagensConversa.map((m: any) => (
+                      <div key={m.id} className={`flex ${m.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm shadow-sm ${
+                          m.direcao === 'enviada'
+                            ? 'bg-green-100 text-gray-800'
+                            : 'bg-white text-gray-800 border'
+                        }`}>
+                          <p className="whitespace-pre-wrap leading-relaxed">{m.conteudo}</p>
+                          <div className="flex items-center justify-end gap-1 mt-1">
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(m.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {m.direcao === 'enviada' && (
+                              <span className={`text-[10px] ${m.enviado ? 'text-blue-500' : 'text-red-400'}`}>
+                                {m.enviado ? '✓✓' : '✗'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Input */}
+                <div className="px-4 py-3 border-t flex gap-2">
+                  <input
+                    type="text"
+                    value={msgEnvio}
+                    onChange={(e) => setMsgEnvio(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && enviarMsgManual()}
+                    placeholder="Mensagem manual..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                  <button
+                    onClick={enviarMsgManual}
+                    disabled={enviandoMsg || !msgEnvio.trim()}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {enviandoMsg ? '...' : '➤'}
+                  </button>
+                  <button
+                    onClick={() => abrirConversa(showConversa!)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-500 hover:bg-gray-50"
+                    title="Atualizar"
+                  >
+                    🔄
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         {loading ? (
           <div className="text-center py-20 text-gray-400">Carregando...</div>
         ) : devedores.length === 0 ? (
@@ -588,6 +701,17 @@ export default function CobrancaPage() {
                             ⏸ Pausar 7d
                           </button>
                         )}
+                        <button
+                          onClick={() => abrirConversa(d.id)}
+                          className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 relative"
+                        >
+                          💬
+                          {d._count.mensagens > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                              {d._count.mensagens > 9 ? '9+' : d._count.mensagens}
+                            </span>
+                          )}
+                        </button>
                         <button
                           onClick={() => cobrar(d.id)}
                           disabled={cobrando === d.id || d.cobrancas.length === 0}

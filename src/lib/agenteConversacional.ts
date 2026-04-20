@@ -26,10 +26,15 @@ export async function processarMensagemDevedor(
     zapiInstanceId?: string | null
     zapiToken?: string | null
     zapiClientToken?: string | null
+    zapiInstanceIdCobranca?: string | null
+    zapiTokenCobranca?: string | null
+    zapiClientTokenCobranca?: string | null
     telefoneAlerta?: string | null
     asaasAtivo: boolean
     asaasApiKey?: string | null
     cobrancaDescontoMax?: any
+    cobrancaParcelasMax?: any
+    chavePix?: string | null
   },
   telefoneDevedor: string,
   mensagemTexto: string
@@ -62,7 +67,10 @@ export async function processarMensagemDevedor(
       || telDB.slice(-10) === telNormalizado.slice(-10) // últimos 10 dígitos (DDD+número)
   })
 
-  if (!devedor) return // número não cadastrado como devedor — ignora
+  if (!devedor) {
+    console.log(`[Agente] Mensagem ignorada — número ${telefoneDevedor} não cadastrado como devedor na empresa ${contaEmpresa.nomeEmpresa}`)
+    return
+  }
 
   // Salva mensagem recebida
   await prisma.mensagemCobranca.create({
@@ -81,9 +89,13 @@ export async function processarMensagemDevedor(
     return
   }
 
+  console.log(`[Agente] Devedor encontrado: ${devedor.nome} | ${devedor.cobrancas.length} cobrança(s) pendente(s)`)
+
   // Monta contexto para a IA
   const acao = await decidirAcao(contaEmpresa, devedor, mensagemTexto)
+  console.log(`[Agente] Ação decidida: ${acao.tipo} para ${devedor.nome}`)
   await executarAcao(contaEmpresa, devedor, acao)
+  console.log(`[Agente] Resposta enviada para ${devedor.nome} (${devedor.telefone})`)
 }
 
 async function decidirAcao(
@@ -201,7 +213,7 @@ Responda em JSON com exatamente este formato:
 }
 
 async function executarAcao(conta: any, devedor: any, acao: AcaoAgente): Promise<void> {
-  const zapi = getZApiClient(conta)
+  const zapi = getZApiClient(conta, 'cobranca')
 
   if (acao.tipo === 'responder') {
     await enviarResposta(conta, devedor, acao.mensagem)
@@ -209,10 +221,13 @@ async function executarAcao(conta: any, devedor: any, acao: AcaoAgente): Promise
   }
 
   if (acao.tipo === 'enviar_pix') {
-    let linkPix = devedor.cobrancas.find((c: any) => c.id === acao.cobrancaId)?.asaasLink || null
+    const cobranca = devedor.cobrancas.find((c: any) => c.id === acao.cobrancaId)
+    const linkPix = cobranca?.asaasLink || null
     let mensagemFinal = acao.mensagem
     if (linkPix) {
       mensagemFinal += `\n\n💳 *Link de pagamento:*\n${linkPix}`
+    } else if (conta.chavePix) {
+      mensagemFinal += `\n\n🔑 *PIX:* ${conta.chavePix}`
     }
     await enviarResposta(conta, devedor, mensagemFinal)
     return
@@ -267,15 +282,16 @@ async function executarAcao(conta: any, devedor: any, acao: AcaoAgente): Promise
     // Envia mensagem de espera para o devedor
     await enviarResposta(conta, devedor, acao.mensagem)
 
-    // Notifica o dono via WhatsApp
-    if (conta.telefoneAlerta && zapi) {
+    // Notifica o dono via WhatsApp (instância jurídica para alertas internos)
+    const zapiJuridico = getZApiClient(conta, 'juridico')
+    if (conta.telefoneAlerta && zapiJuridico) {
       const notificacao = `🔔 *Radar Financeiro — Aprovação necessária*\n\n` +
         `*Devedor:* ${devedor.nome}\n` +
         `*Proposta:* ${acao.desconto}% de desconto em ${acao.parcelas}x\n` +
         `*Valor original:* ${fmt(Number(cobranca.valor))}\n` +
         `*Valor acordado:* ${fmt(valorAcordado)}\n\n` +
         `Acesse Cobranças no Radar para aprovar ou recusar.`
-      await zapi.enviarTexto(conta.telefoneAlerta, notificacao)
+      await zapiJuridico.enviarTexto(conta.telefoneAlerta, notificacao)
     }
     return
   }
@@ -283,7 +299,7 @@ async function executarAcao(conta: any, devedor: any, acao: AcaoAgente): Promise
 
 async function enviarResposta(conta: any, devedor: any, mensagem: string): Promise<void> {
   if (!devedor.telefone) return
-  const zapi = getZApiClient(conta)
+  const zapi = getZApiClient(conta, 'cobranca')
   let enviado = false
   if (zapi) {
     enviado = await zapi.enviarTexto(devedor.telefone, mensagem)

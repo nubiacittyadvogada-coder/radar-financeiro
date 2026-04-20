@@ -49,8 +49,14 @@ export async function POST(req: NextRequest) {
     let conta: any = null
 
     if (instanceId) {
+      // Busca pela instância jurídica ou de cobrança
       conta = await prisma.contaEmpresa.findFirst({
-        where: { zapiInstanceId: instanceId },
+        where: {
+          OR: [
+            { zapiInstanceId: instanceId },
+            { zapiInstanceIdCobranca: instanceId },
+          ],
+        },
       })
     }
 
