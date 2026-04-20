@@ -98,34 +98,37 @@ export async function POST(req: NextRequest) {
     // ── Busca lançamentos já existentes no mesmo mês/ano ───────────────────────
     const jaExistentes = await prisma.lancamentoEmpresa.findMany({
       where: { contaEmpresaId: conta.id, mes: Number(mes), ano: Number(ano) },
-      select: { id: true, dataCompetencia: true, valor: true, descricao: true, statusPg: true },
+      select: { id: true, dataCompetencia: true, valor: true, descricao: true, statusPg: true, tipo: true, origem: true },
     })
 
-    // ids de lançamentos existentes a marcar como pago (conciliação manual ↔ PDF)
+    // ids de lançamentos existentes a marcar como pago (conciliação)
     const conciliadosManualIds: string[] = []
 
     const dadosFiltrados = dados.filter(d => {
-      // 1) Dedup exato por data+valor+descrição (evita importar mesmo PDF duas vezes)
+      // 1) Dedup exato por data+valor+descrição (evita importar mesmo arquivo duas vezes)
       const chaveExata = `${d.dataCompetencia?.toISOString().slice(0, 10)}|${Number(d.valor).toFixed(2)}|${(d.descricao || '').toLowerCase().trim()}`
       const duplicataExata = jaExistentes.some(e =>
         `${e.dataCompetencia?.toISOString().slice(0, 10)}|${Number(e.valor).toFixed(2)}|${(e.descricao || '').toLowerCase().trim()}` === chaveExata
       )
       if (duplicataExata) return false
 
-      // 2) Para PDF: conciliação por valor+data contra lançamentos já existentes
-      //    (ex: lançamento manual "Flash R$1800" == "PAGAMENTO PIX - FLASH APP R$1800")
-      if (isPdfImport && d.dataCompetencia) {
+      // 2) Conciliação por valor+data para QUALQUER tipo de importação
+      //    Evita duplicatas quando já existe lançamento com mesmo valor/data mas descrição diferente
+      //    (ex: manual "Aluguel" == importado "PAGAMENTO PIX - IMOBILIARIA")
+      if (d.dataCompetencia) {
         const valorD = Number(d.valor)
         const match = jaExistentes.find(e => {
           if (!e.dataCompetencia || conciliadosManualIds.includes(e.id)) return false
-          const diffValor = Math.abs(Number(e.valor) - valorD) / (valorD || 1)
+          // Mesmo tipo (receita vs despesa)
+          if (e.tipo !== d.tipo) return false
+          const diffValor = Math.abs(Number(e.valor) - valorD) / (Math.max(valorD, Number(e.valor)) || 1)
           if (diffValor > 0.05) return false
           const diffDias = Math.abs(new Date(e.dataCompetencia).getTime() - d.dataCompetencia!.getTime()) / 86400000
           return diffDias <= 7
         })
         if (match) {
-          conciliadosManualIds.push(match.id) // marca para pago
-          return false // não cria novo lançamento
+          conciliadosManualIds.push(match.id)
+          return false // não cria novo lançamento — já existe um equivalente
         }
       }
 
