@@ -18,10 +18,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       where: { clienteDevedorId: params.id, status: 'pendente' },
     })
 
+    const body = await req.json().catch(() => ({}))
+    const forcar = body?.forcar === true // bypass intervalo de 3 dias
+
     const resultados = []
     for (const c of cobrancas) {
       const { executarCobrancaDevedor } = await import('@/lib/agenteCobranca')
-      const r = await executarCobrancaDevedor(c.id)
+      const r = await executarCobrancaDevedor(c.id, forcar)
       resultados.push({ cobrancaId: c.id, ...r })
     }
 

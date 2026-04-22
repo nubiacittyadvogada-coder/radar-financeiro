@@ -107,7 +107,7 @@ function gerarMensagemFallback(
 /**
  * Executa uma rodada de cobrança para um devedor específico.
  */
-export async function executarCobrancaDevedor(cobrancaId: string) {
+export async function executarCobrancaDevedor(cobrancaId: string, forcarEnvio = false) {
   const cobranca = await prisma.cobrancaDevedor.findUnique({
     where: { id: cobrancaId },
     include: {
@@ -128,15 +128,18 @@ export async function executarCobrancaDevedor(cobrancaId: string) {
   }
 
   // Verifica intervalo mínimo de 3 dias desde a última mensagem enviada ao devedor
-  const INTERVALO_DIAS = 3
-  const ultimaMensagem = await prisma.mensagemCobranca.findFirst({
-    where: { clienteDevedorId: clienteDevedor.id, direcao: 'enviada', enviado: true },
-    orderBy: { criadoEm: 'desc' },
-  })
-  if (ultimaMensagem) {
-    const diasDesdeUltima = (Date.now() - new Date(ultimaMensagem.criadoEm).getTime()) / (1000 * 60 * 60 * 24)
-    if (diasDesdeUltima < INTERVALO_DIAS) {
-      return { enviado: false, pulado: true, motivo: `aguardando intervalo (${Math.ceil(INTERVALO_DIAS - diasDesdeUltima)}d restante)` }
+  // (bypassed quando forcarEnvio=true — acionado pelo botão manual "Cobrar agora")
+  if (!forcarEnvio) {
+    const INTERVALO_DIAS = 3
+    const ultimaMensagem = await prisma.mensagemCobranca.findFirst({
+      where: { clienteDevedorId: clienteDevedor.id, direcao: 'enviada', enviado: true },
+      orderBy: { criadoEm: 'desc' },
+    })
+    if (ultimaMensagem) {
+      const diasDesdeUltima = (Date.now() - new Date(ultimaMensagem.criadoEm).getTime()) / (1000 * 60 * 60 * 24)
+      if (diasDesdeUltima < INTERVALO_DIAS) {
+        return { enviado: false, pulado: true, motivo: `aguardando intervalo (${Math.ceil(INTERVALO_DIAS - diasDesdeUltima)}d restante)` }
+      }
     }
   }
 

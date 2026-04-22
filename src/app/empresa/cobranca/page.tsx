@@ -139,18 +139,24 @@ export default function CobrancaPage() {
     }
   }
 
-  async function cobrar(devedorId: string) {
+  async function cobrar(devedorId: string, forcar = false) {
     if (!token) return
     setCobrando(devedorId)
     try {
       const res = await fetch(`/api/v2/empresa/devedores/${devedorId}/cobrar`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ forcar }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.erro)
       const enviados = data.resultados.filter((r: any) => r.enviado).length
-      alert(`Cobrança enviada! ${enviados} mensagem(ns) enviada(s) via WhatsApp.`)
+      const pulados = data.resultados.filter((r: any) => r.pulado).length
+      if (enviados === 0 && pulados > 0 && !forcar) {
+        const conf = confirm(`Mensagem bloqueada (enviada recentemente).\n\nForçar envio agora mesmo assim?`)
+        if (conf) { cobrar(devedorId, true); return }
+      }
+      alert(`${enviados > 0 ? `✅ ${enviados} mensagem(ns) enviada(s) via WhatsApp!` : pulados > 0 ? `⏸ Bloqueado — já enviado recentemente.` : '❌ 0 enviadas — verifique as configurações Z-API.'}`)
       carregarDevedores(token)
     } catch (err: any) {
       alert('Erro: ' + err.message)
