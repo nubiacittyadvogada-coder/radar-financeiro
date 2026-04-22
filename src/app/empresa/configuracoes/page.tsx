@@ -16,6 +16,8 @@ export default function EmpresaConfiguracoesPage() {
   const [testeMsg, setTesteMsg] = useState('')
   const [testandoLembrete, setTestandoLembrete] = useState(false)
   const [configurandoWebhook, setConfigurandoWebhook] = useState(false)
+  const [diagnosticando, setDiagnosticando] = useState(false)
+  const [diagnosticoResult, setDiagnosticoResult] = useState<any>(null)
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [formFunc, setFormFunc] = useState({ nome: '', email: '', senha: '' })
   const [salvandoFunc, setSalvandoFunc] = useState(false)
@@ -136,6 +138,25 @@ export default function EmpresaConfiguracoesPage() {
       setTesteMsg('❌ ' + err.message)
     } finally {
       setTestandoLembrete(false)
+    }
+  }
+
+  async function executarDiagnostico() {
+    if (!token) return
+    setDiagnosticando(true)
+    setDiagnosticoResult(null)
+    setTesteMsg('')
+    try {
+      const res = await fetch('/api/v2/empresa/zapi/diagnostico', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setDiagnosticoResult(data)
+    } catch (err: any) {
+      setTesteMsg('❌ Erro: ' + err.message)
+    } finally {
+      setDiagnosticando(false)
     }
   }
 
@@ -466,6 +487,13 @@ export default function EmpresaConfiguracoesPage() {
             {configurandoWebhook ? 'Configurando...' : '🤖 Ativar IA Cobrança'}
           </button>
           <button
+            onClick={executarDiagnostico}
+            disabled={diagnosticando}
+            className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 text-sm"
+          >
+            {diagnosticando ? 'Analisando...' : '🔍 Diagnóstico Z-API'}
+          </button>
+          <button
             onClick={salvar}
             disabled={salvando}
             className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 text-sm"
@@ -473,6 +501,64 @@ export default function EmpresaConfiguracoesPage() {
             {salvando ? 'Salvando...' : 'Salvar configurações'}
           </button>
         </div>
+
+        {/* Painel de diagnóstico */}
+        {diagnosticoResult && (
+          <div className="bg-gray-900 text-gray-100 rounded-xl p-5 text-xs font-mono space-y-3">
+            <div className="text-yellow-400 font-bold text-sm">🔍 Resultado do Diagnóstico</div>
+
+            <div>
+              <span className="text-gray-400">Instância: </span>
+              <span className="text-white">{diagnosticoResult.instanciaId || '—'}</span>
+            </div>
+
+            <div>
+              <span className="text-gray-400">Status Z-API: </span>
+              <span className={diagnosticoResult.statusInstancia?.body?.connected ? 'text-green-400' : 'text-red-400'}>
+                {diagnosticoResult.statusInstancia?.body?.connected ? '✅ Conectado' : '❌ Desconectado'}
+              </span>
+              <span className="text-gray-500 ml-2">(HTTP {diagnosticoResult.statusInstancia?.status})</span>
+            </div>
+
+            <div>
+              <span className="text-gray-400">Webhook recebimento: </span>
+              <span className="text-white break-all">
+                {diagnosticoResult.webhookAtual?.body?.value ||
+                 diagnosticoResult.webhookAtual?.body?.webhookUrl ||
+                 diagnosticoResult.webhookAtual?.body?.receivedUrl ||
+                 JSON.stringify(diagnosticoResult.webhookAtual?.body).substring(0, 150)}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-gray-400">Teste de envio: </span>
+              <span className={diagnosticoResult.testeEnvio?.ok ? 'text-green-400' : 'text-red-400'}>
+                {diagnosticoResult.testeEnvio?.ok ? '✅ Enviou!' : '❌ Falhou'}
+              </span>
+              {!diagnosticoResult.testeEnvio?.ok && (
+                <span className="text-red-300 ml-2">
+                  HTTP {diagnosticoResult.testeEnvio?.status} — {JSON.stringify(diagnosticoResult.testeEnvio?.body).substring(0, 200)}
+                </span>
+              )}
+            </div>
+
+            {diagnosticoResult.ultimosWebhooksRecebidos?.length > 0 && (
+              <div>
+                <div className="text-gray-400 mb-1">Últimas mensagens recebidas:</div>
+                {diagnosticoResult.ultimosWebhooksRecebidos.map((l: any, i: number) => (
+                  <div key={i} className="bg-gray-800 rounded px-2 py-1 mb-1">
+                    <span className="text-gray-500">{new Date(l.criadoEm).toLocaleString('pt-BR')} — </span>
+                    <span className="text-green-300">{l.titulo}: </span>
+                    <span className="text-gray-300">{l.mensagem.substring(0, 80)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {diagnosticoResult.ultimosWebhooksRecebidos?.length === 0 && (
+              <div className="text-red-400">⚠️ Nenhuma mensagem chegou ao webhook ainda — confirme a URL no painel Z-API</div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   )

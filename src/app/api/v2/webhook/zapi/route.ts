@@ -90,6 +90,18 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Webhook ZApi] Processando mensagem de ${telefone} (empresa: ${conta.nomeEmpresa}): "${String(texto).substring(0, 80)}"`)
 
+    // Salva no banco para diagnóstico (webhook_log) — máx. 50 caracteres no título
+    prisma.alertaEmpresa.create({
+      data: {
+        contaEmpresaId: conta.id,
+        tipo: 'webhook_log',
+        titulo: `De: ${telefone.slice(-8)}`,
+        mensagem: String(texto).substring(0, 500),
+        canal: 'whatsapp',
+        enviado: false,
+      },
+    }).catch(() => {}) // silencioso — não bloqueia
+
     // Processa em background (não bloqueia o webhook)
     processarMensagemDevedor(conta as any, telefone, String(texto)).catch((err) => {
       console.error('[Webhook ZApi] Erro ao processar mensagem:', err)

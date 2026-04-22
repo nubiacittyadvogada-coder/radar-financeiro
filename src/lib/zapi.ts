@@ -29,10 +29,63 @@ export class ZApiClient {
         body: JSON.stringify({ phone: telefone, message: mensagem }),
       })
       const data = await res.json()
-      // Z-API retorna { id, phone, status } — basta checar res.ok
+      if (!res.ok || data.error) {
+        console.error(`[Z-API] enviarTexto FALHOU — status=${res.status} phone=${telefone} response=${JSON.stringify(data)}`)
+      }
       return res.ok && !data.error
-    } catch {
+    } catch (err: any) {
+      console.error(`[Z-API] enviarTexto ERRO — phone=${telefone} erro=${err.message}`)
       return false
+    }
+  }
+
+  /**
+   * Versão diagnóstica — retorna a resposta completa do Z-API.
+   */
+  async enviarTextoDetalhado(telefone: string, mensagem: string): Promise<{ ok: boolean; status: number; body: any; erro?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/send-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Client-Token': this.clientToken,
+        },
+        body: JSON.stringify({ phone: telefone, message: mensagem }),
+      })
+      const body = await res.json().catch(() => ({}))
+      return { ok: res.ok && !body.error, status: res.status, body }
+    } catch (err: any) {
+      return { ok: false, status: 0, body: null, erro: err.message }
+    }
+  }
+
+  /**
+   * Consulta status da instância Z-API (connected/disconnected).
+   */
+  async consultarStatus(): Promise<{ ok: boolean; status: number; body: any }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/status`, {
+        headers: { 'Client-Token': this.clientToken },
+      })
+      const body = await res.json().catch(() => ({}))
+      return { ok: res.ok, status: res.status, body }
+    } catch (err: any) {
+      return { ok: false, status: 0, body: { erro: err.message } }
+    }
+  }
+
+  /**
+   * Consulta o webhook de recebimento atualmente configurado na instância.
+   */
+  async consultarWebhookRecebimento(): Promise<{ ok: boolean; body: any }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/webhook-received`, {
+        headers: { 'Client-Token': this.clientToken },
+      })
+      const body = await res.json().catch(() => ({}))
+      return { ok: res.ok, body }
+    } catch (err: any) {
+      return { ok: false, body: { erro: err.message } }
     }
   }
 
