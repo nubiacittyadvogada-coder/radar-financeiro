@@ -23,6 +23,7 @@ export default function EmpresaConfiguracoesPage() {
   const [salvandoFunc, setSalvandoFunc] = useState(false)
   const [erroFunc, setErroFunc] = useState('')
   const [usuario, setUsuario] = useState<any>(null)
+  const [mesmaInstancia, setMesmaInstancia] = useState(false)
 
   useEffect(() => {
     const u = localStorage.getItem('radar_usuario')
@@ -42,6 +43,10 @@ export default function EmpresaConfiguracoesPage() {
     if (res.ok) {
       const data = await res.json()
       setConfig(data)
+      // Detecta se usa mesma instância (cobrança vazia ou igual à jurídica)
+      const usaMesma = !data.zapiInstanceIdCobranca ||
+        data.zapiInstanceIdCobranca === data.zapiInstanceId
+      setMesmaInstancia(usaMesma)
       setForm({
         nomeEmpresa: data.nomeEmpresa || '',
         cnpj: data.cnpj || '',
@@ -52,7 +57,7 @@ export default function EmpresaConfiguracoesPage() {
         metaReceita: data.metaReceita || '',
         metaLucro: data.metaLucro || '',
         asaasAtivo: data.asaasAtivo || false,
-        asaasApiKey: '',  // sempre limpo por segurança
+        asaasApiKey: '',
         zapiInstanceId: data.zapiInstanceId || '',
         zapiToken: '',
         zapiClientToken: '',
@@ -188,15 +193,21 @@ export default function EmpresaConfiguracoesPage() {
     setErro('')
     setSucesso(false)
 
-    // Só envia campos não vazios de credenciais
     const payload: any = { ...form }
     // Remove + e espaços do telefone (Z-API não aceita +)
     if (payload.telefoneAlerta) payload.telefoneAlerta = payload.telefoneAlerta.replace(/\D/g, '')
     if (!payload.asaasApiKey) delete payload.asaasApiKey
     if (!payload.zapiToken) delete payload.zapiToken
     if (!payload.zapiClientToken) delete payload.zapiClientToken
-    if (!payload.zapiTokenCobranca) delete payload.zapiTokenCobranca
-    if (!payload.zapiClientTokenCobranca) delete payload.zapiClientTokenCobranca
+    // Se marcou "mesma instância", limpa os campos de cobrança → API salva null → fallback automático
+    if (mesmaInstancia) {
+      payload.zapiInstanceIdCobranca = ''
+      payload.zapiTokenCobranca = ''
+      payload.zapiClientTokenCobranca = ''
+    } else {
+      if (!payload.zapiTokenCobranca) delete payload.zapiTokenCobranca
+      if (!payload.zapiClientTokenCobranca) delete payload.zapiClientTokenCobranca
+    }
     if (payload.metaReceita) payload.metaReceita = Number(payload.metaReceita)
     if (payload.metaLucro) payload.metaLucro = Number(payload.metaLucro)
     if (payload.cobrancaDescontoMax) payload.cobrancaDescontoMax = Number(payload.cobrancaDescontoMax)
@@ -318,103 +329,91 @@ export default function EmpresaConfiguracoesPage() {
           )}
         </div>
 
-        {/* Z-API — seção unificada e simplificada */}
+        {/* Z-API — seção simplificada */}
         <div className="bg-white rounded-xl p-6 shadow-sm border space-y-5">
           <div>
             <h2 className="font-semibold text-gray-800 text-lg">📱 WhatsApp (Z-API)</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Configure os números de WhatsApp. Você encontra os dados no{' '}
-              <a href="https://app.z-api.io" target="_blank" className="text-blue-600 underline">painel Z-API</a>.
+              Dados disponíveis em{' '}
+              <a href="https://app.z-api.io" target="_blank" className="text-blue-600 underline font-medium">app.z-api.io</a>
+              {' '}→ sua instância → aba Token.
             </p>
           </div>
 
-          {/* Passo a passo */}
-          <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800 space-y-1">
-            <div className="font-semibold mb-2">Como preencher:</div>
-            <div>1. Acesse <strong>app.z-api.io</strong> e abra sua instância</div>
-            <div>2. Copie o <strong>Instance ID</strong> (aparece no topo da instância)</div>
-            <div>3. Copie o <strong>Token</strong> (aba "Token" ou "Credenciais")</div>
-            <div>4. Copie o <strong>Security Token</strong> (também chamado "Client Token")</div>
-            <div>5. Cole nos campos abaixo e clique em <strong>Salvar</strong></div>
-          </div>
-
-          {/* Instância usada para ENVIAR cobranças */}
-          <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">💬</span>
-              <div>
-                <div className="font-semibold text-gray-800">Número que ENVIA cobranças aos clientes</div>
-                <div className="text-xs text-gray-500">Este número envia os lembretes de honorários e cobranças automáticas</div>
-              </div>
+          {/* Instância principal */}
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-gray-700">
+              Instância Z-API
+              {config?.zapiInstanceId && (
+                <span className="ml-2 text-xs font-normal text-gray-400">atual: {config.zapiInstanceId}</span>
+              )}
             </div>
-            {config?.zapiInstanceIdCobranca ? (
-              <div className="text-xs bg-orange-50 px-3 py-2 rounded text-orange-700">
-                ✓ Instance ID atual: <strong>{config.zapiInstanceIdCobranca}</strong>
-              </div>
-            ) : config?.zapiInstanceId ? (
-              <div className="text-xs bg-yellow-50 px-3 py-2 rounded text-yellow-700">
-                ⚠️ Usando fallback — Instance ID atual: <strong>{config.zapiInstanceId}</strong>
-              </div>
-            ) : (
-              <div className="text-xs bg-red-50 px-3 py-2 rounded text-red-700">
-                ❌ Não configurado — preencha abaixo
-              </div>
-            )}
-            {inp('Instance ID', 'zapiInstanceIdCobranca', 'text', 'Cole o Instance ID aqui')}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Token</label>
-              <input type="password" value={form.zapiTokenCobranca}
-                onChange={(e) => setForm({ ...form, zapiTokenCobranca: e.target.value })}
-                placeholder={config?.zapiTokenCobranca ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Token aqui'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Security Token (Client Token)</label>
-              <input type="password" value={form.zapiClientTokenCobranca}
-                onChange={(e) => setForm({ ...form, zapiClientTokenCobranca: e.target.value })}
-                placeholder={config?.zapiClientTokenCobranca ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Security Token aqui'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
-              />
-            </div>
-          </div>
-
-          {/* Instância jurídica — alertas para a empresa */}
-          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⚖️</span>
-              <div>
-                <div className="font-semibold text-gray-800">Número que VOCÊ recebe alertas do sistema</div>
-                <div className="text-xs text-gray-500">Recebe DRE, resumo semanal, alertas de vencimento (para uso interno)</div>
-              </div>
-            </div>
-            {config?.zapiInstanceId && (
-              <div className="text-xs bg-gray-50 px-3 py-2 rounded text-gray-600">
-                ✓ Instance ID atual: <strong>{config.zapiInstanceId}</strong>
-              </div>
-            )}
             {inp('Instance ID', 'zapiInstanceId', 'text', 'Cole o Instance ID aqui')}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Token</label>
               <input type="password" value={form.zapiToken}
                 onChange={(e) => setForm({ ...form, zapiToken: e.target.value })}
-                placeholder={config?.zapiToken ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Token aqui'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+                placeholder={config?.zapiToken ? '●●●●●● (salvo — cole para atualizar)' : 'Cole o Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Security Token (Client Token)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Security Token</label>
               <input type="password" value={form.zapiClientToken}
                 onChange={(e) => setForm({ ...form, zapiClientToken: e.target.value })}
-                placeholder={config?.zapiClientToken ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Security Token aqui'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+                placeholder={config?.zapiClientToken ? '●●●●●● (salvo — cole para atualizar)' : 'Cole o Security Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400"
               />
             </div>
           </div>
 
-          <div className="pt-1 hidden">{/* placeholder para manter estrutura */}
-            </p>
+          {/* Toggle: um número ou dois? */}
+          <div className="border-t pt-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mesmaInstancia}
+                onChange={(e) => setMesmaInstancia(e.target.checked)}
+                className="w-4 h-4 accent-blue-600"
+              />
+              <div>
+                <div className="text-sm font-medium text-gray-800">Tenho apenas um número WhatsApp</div>
+                <div className="text-xs text-gray-500">Cobranças e alertas saem pelo mesmo número acima</div>
+              </div>
+            </label>
           </div>
+
+          {/* Instância separada para cobrança (só aparece se dois números) */}
+          {!mesmaInstancia && (
+            <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3">
+              <div className="text-sm font-semibold text-gray-700">
+                Instância separada para cobranças
+                {config?.zapiInstanceIdCobranca && (
+                  <span className="ml-2 text-xs font-normal text-gray-400">atual: {config.zapiInstanceIdCobranca}</span>
+                )}
+              </div>
+              <div className="text-xs text-orange-700 bg-orange-50 px-3 py-2 rounded">
+                Preencha apenas se tiver um <strong>segundo número</strong> dedicado para enviar cobranças aos clientes.
+              </div>
+              {inp('Instance ID (cobrança)', 'zapiInstanceIdCobranca', 'text', 'Instance ID do segundo número')}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Token (cobrança)</label>
+                <input type="password" value={form.zapiTokenCobranca}
+                  onChange={(e) => setForm({ ...form, zapiTokenCobranca: e.target.value })}
+                  placeholder={config?.zapiTokenCobranca ? '●●●●●● (salvo — cole para atualizar)' : 'Cole o Token aqui'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Security Token (cobrança)</label>
+                <input type="password" value={form.zapiClientTokenCobranca}
+                  onChange={(e) => setForm({ ...form, zapiClientTokenCobranca: e.target.value })}
+                  placeholder={config?.zapiClientTokenCobranca ? '●●●●●● (salvo — cole para atualizar)' : 'Cole o Security Token aqui'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Funcionários — só o dono vê */}

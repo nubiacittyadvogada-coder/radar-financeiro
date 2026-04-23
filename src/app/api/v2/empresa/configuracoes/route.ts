@@ -42,12 +42,20 @@ export async function PATCH(req: NextRequest) {
     ]
     // Campos numéricos opcionais — string vazia vira null
     const camposNumericos = ['cobrancaDescontoMax', 'cobrancaParcelasMax', 'metaLucro', 'metaReceita']
+    const camposStringZapi = [
+      'zapiInstanceId', 'zapiToken', 'zapiClientToken',
+      'zapiInstanceIdCobranca', 'zapiTokenCobranca', 'zapiClientTokenCobranca',
+    ]
     const update: any = {}
     for (const key of permitidos) {
       if (key in body) {
         if (camposNumericos.includes(key)) {
           const v = body[key]
           update[key] = (v === '' || v === null || v === undefined) ? null : Number(v)
+        } else if (camposStringZapi.includes(key)) {
+          // String vazia em campo Z-API → null (ativa o fallback automático)
+          const v = body[key]
+          update[key] = (v === '' || v === null || v === undefined) ? null : String(v).trim()
         } else {
           update[key] = body[key]
         }
@@ -59,21 +67,37 @@ export async function PATCH(req: NextRequest) {
       data: update,
     })
 
-    // Auto-configura webhook de recebimento na Z-API quando credenciais são salvas
+    const host = req.headers.get('host') || 'radar-financeiro-roan.vercel.app'
+    const protocol = host.includes('localhost') ? 'http' : 'https'
+    const webhookUrl = `${protocol}://${host}/api/v2/webhook/zapi`
+
+    // Auto-configura webhook na instância Jurídico quando credenciais são salvas
     const instanceId = update.zapiInstanceId || atualizada.zapiInstanceId
     const token = update.zapiToken || atualizada.zapiToken
     const clientToken = update.zapiClientToken || atualizada.zapiClientToken
-
     if (instanceId && token && clientToken && (update.zapiInstanceId || update.zapiToken || update.zapiClientToken)) {
       try {
         const zapi = new ZApiClient(instanceId, token, clientToken)
-        const host = req.headers.get('host') || 'radar-financeiro-roan.vercel.app'
-        const protocol = host.includes('localhost') ? 'http' : 'https'
-        const webhookUrl = `${protocol}://${host}/api/v2/webhook/zapi`
-        const ok = await zapi.configurarWebhookRecebimento(webhookUrl)
-        console.log(`[Config] Webhook Z-API configurado: ${ok ? 'OK' : 'FALHOU'} → ${webhookUrl}`)
+        await zapi.configurarWebhookRecebimento(webhookUrl)
+        console.log(`[Config] Webhook Jurídico configurado → ${webhookUrl}`)
       } catch (err: any) {
-        console.error('[Config] Erro ao configurar webhook Z-API:', err.message)
+        console.error('[Config] Erro webhook Jurídico:', err.message)
+      }
+    }
+
+    // Auto-configura webhook na instância Cobrança (se for diferente da Jurídica)
+    const instCobrancaId = atualizada.zapiInstanceIdCobranca
+    const instCobrancaToken = atualizada.zapiTokenCobranca
+    const instCobrancaClient = atualizada.zapiClientTokenCobranca
+    const cobHouveMudanca = update.zapiInstanceIdCobranca || update.zapiTokenCobranca || update.zapiClientTokenCobranca
+    const cobInstanciaDiferente = instCobrancaId && instCobrancaId !== atualizada.zapiInstanceId
+    if (instCobrancaId && instCobrancaToken && instCobrancaClient && cobHouveMudanca && cobInstanciaDiferente) {
+      try {
+        const zapiCob = new ZApiClient(instCobrancaId, instCobrancaToken, instCobrancaClient)
+        await zapiCob.configurarWebhookRecebimento(webhookUrl)
+        console.log(`[Config] Webhook Cobrança configurado → ${webhookUrl}`)
+      } catch (err: any) {
+        console.error('[Config] Erro webhook Cobrança:', err.message)
       }
     }
 
