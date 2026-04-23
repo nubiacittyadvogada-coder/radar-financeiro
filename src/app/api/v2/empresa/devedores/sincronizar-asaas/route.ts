@@ -2,16 +2,14 @@
  * POST /api/v2/empresa/devedores/sincronizar-asaas
  * Sincroniza status de cobranças com o Asaas:
  * - RECEIVED/CONFIRMED → marca como 'pago'
- * - DELETED/CANCELLED ou não encontrado → marca como 'cancelado'
- * - Devedores sem nenhuma cobrança pendente → marca ativo=false
+ * - DELETED/REFUNDED   → marca como 'cancelado'
+ * - Devedores sem cobrança pendente → recalcula totais e marca ativo=false
  */
 
 import { NextRequest } from 'next/server'
 import { getUsuario, getEmpresaUserId } from '@/lib/auth-utils'
 import { getAsaasClient } from '@/lib/asaas'
 import prisma from '@/server/lib/db'
-
-export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     const asaas = getAsaasClient(conta.asaasApiKey)
 
-    // Busca todas as cobranças pendentes que têm ID no Asaas
+    // Busca cobranças pendentes que têm ID no Asaas
     const cobrancas = await prisma.cobrancaDevedor.findMany({
       where: {
         status: 'pendente',
@@ -37,83 +35,111 @@ export async function POST(req: NextRequest) {
       select: { id: true, asaasPaymentId: true, valor: true, clienteDevedorId: true },
     })
 
-    let pagas = 0
-    let canceladas = 0
+    // Consulta todas as cobranças no Asaas em paralelo (muito mais rápido)
+    const resultados = await Promise.allSettled(
+      cobrancas.map(c => asaas.buscarCobranca(c.asaasPaymentId!).then(p => ({ c, p })))
+    )
 
-    for (const cobranca of cobrancas) {
-      try {
-        const pagamento = await asaas.buscarCobranca(cobranca.asaasPaymentId!)
+    const updatesPagas: string[] = []
+    const updatesCanceladas: string[] = []
+    const pagasData: Record<string, { pagoEm: Date; valorPago: number }> = {}
 
-        if (pagamento.status === 'RECEIVED' || pagamento.status === 'CONFIRMED') {
-          await prisma.cobrancaDevedor.update({
-            where: { id: cobranca.id },
-            data: {
-              status: 'pago',
-              pagoEm: pagamento.paymentDate ? new Date(pagamento.paymentDate) : new Date(),
-              valorPago: pagamento.value || cobranca.valor,
-            },
-          })
-          pagas++
-        } else if (pagamento.status === 'DELETED' || pagamento.status === 'REFUNDED' || pagamento.deleted === true) {
-          await prisma.cobrancaDevedor.update({
-            where: { id: cobranca.id },
-            data: { status: 'cancelado' },
-          })
-          canceladas++
+    for (const r of resultados) {
+      if (r.status === 'fulfilled') {
+        const { c, p } = r.value
+        if (p.status === 'RECEIVED' || p.status === 'CONFIRMED') {
+          updatesPagas.push(c.id)
+          pagasData[c.id] = {
+            pagoEm: p.paymentDate ? new Date(p.paymentDate) : new Date(),
+            valorPago: p.value ?? Number(c.valor),
+          }
+        } else if (p.status === 'DELETED' || p.status === 'REFUNDED' || p.deleted === true) {
+          updatesCanceladas.push(c.id)
         }
-      } catch {
-        // Se a API retornar 404 ou erro, a cobrança foi excluída no Asaas
-        await prisma.cobrancaDevedor.update({
-          where: { id: cobranca.id },
-          data: { status: 'cancelado' },
-        }).catch(() => {})
-        canceladas++
+      } else {
+        // Erro ao consultar (ex: 404 = excluída no Asaas)
+        const c = cobrancas[resultados.indexOf(r)]
+        updatesCanceladas.push(c.id)
       }
     }
 
-    // Recalcula totais e desativa devedores sem cobranças pendentes
-    const devedores = await prisma.clienteDevedor.findMany({
-      where: { contaEmpresaId: conta.id },
-      include: { cobrancas: true },
-    })
+    // Atualiza banco em paralelo para cada cobrança paga/cancelada
+    const dbOps = [
+      ...updatesPagas.map(id =>
+        prisma.cobrancaDevedor.update({
+          where: { id },
+          data: {
+            status: 'pago',
+            pagoEm: pagasData[id].pagoEm,
+            valorPago: pagasData[id].valorPago,
+          },
+        })
+      ),
+      ...updatesCanceladas.map(id =>
+        prisma.cobrancaDevedor.update({
+          where: { id },
+          data: { status: 'cancelado' },
+        })
+      ),
+    ]
+
+    if (dbOps.length > 0) {
+      await Promise.allSettled(dbOps)
+    }
+
+    // Recalcula totais dos devedores afetados
+    const devedoresAfetados = [
+      ...new Set([
+        ...updatesPagas.map(id => cobrancas.find(c => c.id === id)!.clienteDevedorId),
+        ...updatesCanceladas.map(id => cobrancas.find(c => c.id === id)!.clienteDevedorId),
+      ]),
+    ]
 
     let desativados = 0
-    for (const d of devedores) {
-      const totalDevido = d.cobrancas
-        .filter(c => c.status === 'pendente')
-        .reduce((s, c) => s + Number(c.valor), 0)
-      const totalPago = d.cobrancas
-        .filter(c => c.status === 'pago')
-        .reduce((s, c) => s + Number(c.valorPago || c.valor), 0)
-      const temPendente = d.cobrancas.some(c => c.status === 'pendente')
 
-      await prisma.clienteDevedor.update({
-        where: { id: d.id },
-        data: {
-          totalDevido,
-          totalPago,
-          ativo: temPendente,
-        },
+    if (devedoresAfetados.length > 0) {
+      const devedores = await prisma.clienteDevedor.findMany({
+        where: { id: { in: devedoresAfetados } },
+        include: { cobrancas: { select: { status: true, valor: true, valorPago: true } } },
       })
-      if (!temPendente && d.ativo) desativados++
+
+      await Promise.allSettled(
+        devedores.map(d => {
+          const totalDevido = d.cobrancas
+            .filter(c => c.status === 'pendente')
+            .reduce((s, c) => s + Number(c.valor), 0)
+          const totalPago = d.cobrancas
+            .filter(c => c.status === 'pago')
+            .reduce((s, c) => s + Number(c.valorPago ?? c.valor), 0)
+          const temPendente = d.cobrancas.some(c => c.status === 'pendente')
+          if (!temPendente && d.ativo) desativados++
+          return prisma.clienteDevedor.update({
+            where: { id: d.id },
+            data: { totalDevido, totalPago, ativo: temPendente },
+          })
+        })
+      )
     }
 
     const partes = []
-    if (pagas > 0) partes.push(`${pagas} paga(s)`)
-    if (canceladas > 0) partes.push(`${canceladas} excluída(s) do Asaas`)
+    if (updatesPagas.length > 0) partes.push(`${updatesPagas.length} paga(s)`)
+    if (updatesCanceladas.length > 0) partes.push(`${updatesCanceladas.length} excluída(s) do Asaas`)
     if (desativados > 0) partes.push(`${desativados} devedor(es) quitado(s)`)
 
     return Response.json({
       ok: true,
       verificadas: cobrancas.length,
-      pagas,
-      canceladas,
+      pagas: updatesPagas.length,
+      canceladas: updatesCanceladas.length,
       desativados,
       mensagem: partes.length > 0
         ? `Sincronizado: ${partes.join(', ')}.`
+        : cobrancas.length === 0
+        ? 'Nenhuma cobrança Asaas pendente para verificar.'
         : 'Tudo já estava atualizado.',
     })
   } catch (err: any) {
-    return Response.json({ erro: err.message }, { status: 500 })
+    console.error('[sincronizar-asaas] Erro:', err.message)
+    return Response.json({ erro: err.message || 'Erro interno' }, { status: 500 })
   }
 }

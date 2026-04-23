@@ -293,7 +293,8 @@ function gerarAnaliseFallback(mes: number, ano: number, atual: any, anterior: an
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') || req.nextUrl.searchParams.get('secret')
+  const authHeader = req.headers.get('authorization')
+  const secret = authHeader?.replace('Bearer ', '') || req.headers.get('x-cron-secret') || req.nextUrl.searchParams.get('secret')
   if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
     return Response.json({ erro: 'Não autorizado' }, { status: 401 })
   }

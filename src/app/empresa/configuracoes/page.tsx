@@ -190,6 +190,8 @@ export default function EmpresaConfiguracoesPage() {
 
     // Só envia campos não vazios de credenciais
     const payload: any = { ...form }
+    // Remove + e espaços do telefone (Z-API não aceita +)
+    if (payload.telefoneAlerta) payload.telefoneAlerta = payload.telefoneAlerta.replace(/\D/g, '')
     if (!payload.asaasApiKey) delete payload.asaasApiKey
     if (!payload.zapiToken) delete payload.zapiToken
     if (!payload.zapiClientToken) delete payload.zapiClientToken
@@ -269,7 +271,10 @@ export default function EmpresaConfiguracoesPage() {
             </label>
           </div>
           {inp('Número WhatsApp', 'telefoneAlerta', 'text', '5531999096712')}
-          <p className="text-xs text-gray-500">Formato: 55 + DDD + número (sem espaços ou traços)</p>
+          <p className="text-xs text-gray-500">Formato: 55 + DDD + número (sem espaços, traços ou +)</p>
+          {form.telefoneAlerta?.startsWith('+') && (
+            <p className="text-xs text-orange-600 font-medium">⚠️ Remova o + do início — será corrigido automaticamente ao salvar</p>
+          )}
           {inp('Chave PIX', 'chavePix', 'text', 'Ex: financeiro@ncadvogados.com.br ou CPF/CNPJ')}
           <p className="text-xs text-gray-500">Incluída automaticamente nos lembretes de honorários enviados aos clientes</p>
         </div>
@@ -313,83 +318,101 @@ export default function EmpresaConfiguracoesPage() {
           )}
         </div>
 
-        {/* Z-API */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border space-y-4">
-          <h2 className="font-semibold text-gray-800">Z-API (WhatsApp)</h2>
-          <p className="text-sm text-gray-500">
-            Integração Z-API para enviar mensagens de cobrança personalizadas via WhatsApp.
-          </p>
-          {inp('Instance ID', 'zapiInstanceId', 'text', 'Ex: 3F13F86C80D15015D87D4AC8C214C6FF')}
+        {/* Z-API — seção unificada e simplificada */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Token
-              {config?.zapiToken && <span className="ml-2 text-xs text-gray-400">(atual: {config.zapiToken})</span>}
-            </label>
-            <input
-              type="password"
-              value={form.zapiToken}
-              onChange={(e) => setForm({ ...form, zapiToken: e.target.value })}
-              placeholder="Cole o novo token para atualizar"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Client Token
-              {config?.zapiClientToken && <span className="ml-2 text-xs text-gray-400">(atual: {config.zapiClientToken})</span>}
-            </label>
-            <input
-              type="password"
-              value={form.zapiClientToken}
-              onChange={(e) => setForm({ ...form, zapiClientToken: e.target.value })}
-              placeholder="Cole o novo client token para atualizar"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
-            />
-          </div>
-          <div className="pt-2 border-t">
-            <p className="text-xs text-gray-500 bg-blue-50 rounded px-3 py-2">
-              💡 A instância acima é a <strong>Jurídica</strong> — usada para alertas internos, DRE e resumos enviados a você.
+            <h2 className="font-semibold text-gray-800 text-lg">📱 WhatsApp (Z-API)</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Configure os números de WhatsApp. Você encontra os dados no{' '}
+              <a href="https://app.z-api.io" target="_blank" className="text-blue-600 underline">painel Z-API</a>.
             </p>
           </div>
-        </div>
 
-        {/* Z-API Cobrança */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border space-y-4">
-          <h2 className="font-semibold text-gray-800">Z-API Cobrança (WhatsApp)</h2>
-          <p className="text-sm text-gray-500">
-            Número dedicado para mensagens aos clientes/devedores (lembretes de honorários, cobranças).
-            Se não configurado, usa o número jurídico como fallback.
-          </p>
-          {inp('Instance ID', 'zapiInstanceIdCobranca', 'text', 'Ex: A1B2C3D4E5F6...')}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Token
-              {config?.zapiTokenCobranca && <span className="ml-2 text-xs text-gray-400">(configurado ✓)</span>}
-            </label>
-            <input
-              type="password"
-              value={form.zapiTokenCobranca}
-              onChange={(e) => setForm({ ...form, zapiTokenCobranca: e.target.value })}
-              placeholder="Cole o novo token para atualizar"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
-            />
+          {/* Passo a passo */}
+          <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-800 space-y-1">
+            <div className="font-semibold mb-2">Como preencher:</div>
+            <div>1. Acesse <strong>app.z-api.io</strong> e abra sua instância</div>
+            <div>2. Copie o <strong>Instance ID</strong> (aparece no topo da instância)</div>
+            <div>3. Copie o <strong>Token</strong> (aba "Token" ou "Credenciais")</div>
+            <div>4. Copie o <strong>Security Token</strong> (também chamado "Client Token")</div>
+            <div>5. Cole nos campos abaixo e clique em <strong>Salvar</strong></div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Client Token
-              {config?.zapiClientTokenCobranca && <span className="ml-2 text-xs text-gray-400">(configurado ✓)</span>}
-            </label>
-            <input
-              type="password"
-              value={form.zapiClientTokenCobranca}
-              onChange={(e) => setForm({ ...form, zapiClientTokenCobranca: e.target.value })}
-              placeholder="Cole o novo client token para atualizar"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
-            />
+
+          {/* Instância usada para ENVIAR cobranças */}
+          <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">💬</span>
+              <div>
+                <div className="font-semibold text-gray-800">Número que ENVIA cobranças aos clientes</div>
+                <div className="text-xs text-gray-500">Este número envia os lembretes de honorários e cobranças automáticas</div>
+              </div>
+            </div>
+            {config?.zapiInstanceIdCobranca ? (
+              <div className="text-xs bg-orange-50 px-3 py-2 rounded text-orange-700">
+                ✓ Instance ID atual: <strong>{config.zapiInstanceIdCobranca}</strong>
+              </div>
+            ) : config?.zapiInstanceId ? (
+              <div className="text-xs bg-yellow-50 px-3 py-2 rounded text-yellow-700">
+                ⚠️ Usando fallback — Instance ID atual: <strong>{config.zapiInstanceId}</strong>
+              </div>
+            ) : (
+              <div className="text-xs bg-red-50 px-3 py-2 rounded text-red-700">
+                ❌ Não configurado — preencha abaixo
+              </div>
+            )}
+            {inp('Instance ID', 'zapiInstanceIdCobranca', 'text', 'Cole o Instance ID aqui')}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Token</label>
+              <input type="password" value={form.zapiTokenCobranca}
+                onChange={(e) => setForm({ ...form, zapiTokenCobranca: e.target.value })}
+                placeholder={config?.zapiTokenCobranca ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Security Token (Client Token)</label>
+              <input type="password" value={form.zapiClientTokenCobranca}
+                onChange={(e) => setForm({ ...form, zapiClientTokenCobranca: e.target.value })}
+                placeholder={config?.zapiClientTokenCobranca ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Security Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
           </div>
-          <div className="pt-2 border-t">
-            <p className="text-xs text-gray-500 bg-orange-50 rounded px-3 py-2">
-              💡 Esta é a instância de <strong>Cobrança</strong> — usada para lembretes de honorários e mensagens automáticas para clientes.
+
+          {/* Instância jurídica — alertas para a empresa */}
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚖️</span>
+              <div>
+                <div className="font-semibold text-gray-800">Número que VOCÊ recebe alertas do sistema</div>
+                <div className="text-xs text-gray-500">Recebe DRE, resumo semanal, alertas de vencimento (para uso interno)</div>
+              </div>
+            </div>
+            {config?.zapiInstanceId && (
+              <div className="text-xs bg-gray-50 px-3 py-2 rounded text-gray-600">
+                ✓ Instance ID atual: <strong>{config.zapiInstanceId}</strong>
+              </div>
+            )}
+            {inp('Instance ID', 'zapiInstanceId', 'text', 'Cole o Instance ID aqui')}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Token</label>
+              <input type="password" value={form.zapiToken}
+                onChange={(e) => setForm({ ...form, zapiToken: e.target.value })}
+                placeholder={config?.zapiToken ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Security Token (Client Token)</label>
+              <input type="password" value={form.zapiClientToken}
+                onChange={(e) => setForm({ ...form, zapiClientToken: e.target.value })}
+                placeholder={config?.zapiClientToken ? '●●●●●● (configurado — cole para atualizar)' : 'Cole o Security Token aqui'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="pt-1 hidden">{/* placeholder para manter estrutura */}
             </p>
           </div>
         </div>
@@ -504,47 +527,84 @@ export default function EmpresaConfiguracoesPage() {
 
         {/* Painel de diagnóstico */}
         {diagnosticoResult && (
-          <div className="bg-gray-900 text-gray-100 rounded-xl p-5 text-xs font-mono space-y-3">
+          <div className="bg-gray-900 text-gray-100 rounded-xl p-5 text-xs font-mono space-y-4">
             <div className="text-yellow-400 font-bold text-sm">🔍 Resultado do Diagnóstico</div>
 
-            <div>
-              <span className="text-gray-400">Instância: </span>
-              <span className="text-white">{diagnosticoResult.instanciaId || '—'}</span>
-            </div>
-
-            <div>
-              <span className="text-gray-400">Status Z-API: </span>
-              <span className={diagnosticoResult.statusInstancia?.body?.connected ? 'text-green-400' : 'text-red-400'}>
-                {diagnosticoResult.statusInstancia?.body?.connected ? '✅ Conectado' : '❌ Desconectado'}
-              </span>
-              <span className="text-gray-500 ml-2">(HTTP {diagnosticoResult.statusInstancia?.status})</span>
-            </div>
-
-            <div>
-              <span className="text-gray-400">Webhook recebimento: </span>
-              <span className="text-white break-all">
-                {diagnosticoResult.webhookAtual?.body?.value ||
-                 diagnosticoResult.webhookAtual?.body?.webhookUrl ||
-                 diagnosticoResult.webhookAtual?.body?.receivedUrl ||
-                 JSON.stringify(diagnosticoResult.webhookAtual?.body).substring(0, 150)}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-gray-400">Teste de envio: </span>
-              <span className={diagnosticoResult.testeEnvio?.ok ? 'text-green-400' : 'text-red-400'}>
-                {diagnosticoResult.testeEnvio?.ok ? '✅ Enviou!' : '❌ Falhou'}
-              </span>
-              {!diagnosticoResult.testeEnvio?.ok && (
-                <span className="text-red-300 ml-2">
-                  HTTP {diagnosticoResult.testeEnvio?.status} — {JSON.stringify(diagnosticoResult.testeEnvio?.body).substring(0, 200)}
-                </span>
+            {/* Instância Jurídico */}
+            <div className="border border-gray-700 rounded-lg p-3 space-y-2">
+              <div className="text-blue-300 font-bold">⚖️ Instância JURÍDICO (alertas internos para você)</div>
+              <div>
+                <span className="text-gray-400">ID: </span>
+                <span className="text-white">{diagnosticoResult.juridico?.instanceId || '❌ Não configurado'}</span>
+              </div>
+              {diagnosticoResult.juridico?.configurado && (
+                <>
+                  <div>
+                    <span className="text-gray-400">Status: </span>
+                    <span className={diagnosticoResult.juridico?.status?.body?.connected ? 'text-green-400' : 'text-red-400'}>
+                      {diagnosticoResult.juridico?.status?.body?.connected ? '✅ Conectado' : '❌ Desconectado — escaneie o QR no painel Z-API'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Teste de envio: </span>
+                    <span className={diagnosticoResult.juridico?.testeEnvio?.ok ? 'text-green-400' : 'text-red-400'}>
+                      {diagnosticoResult.juridico?.testeEnvio?.ok ? '✅ Enviou!' : `❌ Falhou (HTTP ${diagnosticoResult.juridico?.testeEnvio?.status})`}
+                    </span>
+                  </div>
+                </>
               )}
             </div>
 
-            {diagnosticoResult.ultimosWebhooksRecebidos?.length > 0 && (
+            {/* Instância Cobrança */}
+            <div className="border border-orange-700 rounded-lg p-3 space-y-2">
+              <div className="text-orange-300 font-bold">💬 Instância COBRANÇA (mensagens para clientes/devedores)</div>
               <div>
-                <div className="text-gray-400 mb-1">Últimas mensagens recebidas:</div>
+                <span className="text-gray-400">ID: </span>
+                <span className="text-white">{diagnosticoResult.cobranca?.instanceId || '❌ Não configurado'}</span>
+                {diagnosticoResult.cobranca?.usandoFallbackJuridico && (
+                  <span className="text-yellow-400 ml-2">(usando fallback: instância jurídica)</span>
+                )}
+              </div>
+              {diagnosticoResult.cobranca?.configurado && (
+                <>
+                  <div>
+                    <span className="text-gray-400">Status: </span>
+                    <span className={diagnosticoResult.cobranca?.status?.body?.connected ? 'text-green-400' : 'text-red-400'}>
+                      {diagnosticoResult.cobranca?.status?.body?.connected ? '✅ Conectado' : '❌ Desconectado — escaneie o QR no painel Z-API'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Teste de envio: </span>
+                    <span className={diagnosticoResult.cobranca?.testeEnvio?.ok ? 'text-green-400' : 'text-red-400'}>
+                      {diagnosticoResult.cobranca?.testeEnvio?.ok ? '✅ Enviou!' : `❌ Falhou (HTTP ${diagnosticoResult.cobranca?.testeEnvio?.status})`}
+                    </span>
+                    {!diagnosticoResult.cobranca?.testeEnvio?.ok && diagnosticoResult.cobranca?.testeEnvio?.body && (
+                      <div className="text-red-300 mt-1 break-all">
+                        {JSON.stringify(diagnosticoResult.cobranca?.testeEnvio?.body).substring(0, 200)}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Webhook */}
+            {diagnosticoResult.juridico?.webhookAtual && (
+              <div className="space-y-1">
+                <div className="text-gray-400">Webhook recebimento configurado:</div>
+                <div className="text-white break-all text-xs">
+                  {diagnosticoResult.juridico?.webhookAtual?.body?.value ||
+                   diagnosticoResult.juridico?.webhookAtual?.body?.webhookUrl ||
+                   diagnosticoResult.juridico?.webhookAtual?.body?.receivedUrl ||
+                   JSON.stringify(diagnosticoResult.juridico?.webhookAtual?.body).substring(0, 150)}
+                </div>
+              </div>
+            )}
+
+            {/* Últimas mensagens recebidas */}
+            {diagnosticoResult.ultimosWebhooksRecebidos?.length > 0 ? (
+              <div>
+                <div className="text-gray-400 mb-1">Últimas mensagens recebidas dos clientes:</div>
                 {diagnosticoResult.ultimosWebhooksRecebidos.map((l: any, i: number) => (
                   <div key={i} className="bg-gray-800 rounded px-2 py-1 mb-1">
                     <span className="text-gray-500">{new Date(l.criadoEm).toLocaleString('pt-BR')} — </span>
@@ -553,9 +613,23 @@ export default function EmpresaConfiguracoesPage() {
                   </div>
                 ))}
               </div>
+            ) : (
+              <div className="text-yellow-400">⚠️ Nenhuma mensagem chegou ao webhook ainda</div>
             )}
-            {diagnosticoResult.ultimosWebhooksRecebidos?.length === 0 && (
-              <div className="text-red-400">⚠️ Nenhuma mensagem chegou ao webhook ainda — confirme a URL no painel Z-API</div>
+
+            {/* Últimas cobranças enviadas */}
+            {diagnosticoResult.ultimasCobrancasEnviadas?.length > 0 && (
+              <div>
+                <div className="text-gray-400 mb-1">Últimas cobranças enviadas:</div>
+                {diagnosticoResult.ultimasCobrancasEnviadas.map((m: any, i: number) => (
+                  <div key={i} className="bg-gray-800 rounded px-2 py-1 mb-1">
+                    <span className={m.enviado ? 'text-green-400' : 'text-red-400'}>{m.enviado ? '✅' : '❌'} </span>
+                    <span className="text-gray-300">{m.devedor} — </span>
+                    <span className="text-gray-500">{new Date(m.criadoEm).toLocaleString('pt-BR')}</span>
+                    <div className="text-gray-400 mt-0.5 italic">{m.trecho}...</div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

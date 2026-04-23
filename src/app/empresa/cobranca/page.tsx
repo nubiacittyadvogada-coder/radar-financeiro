@@ -113,12 +113,14 @@ export default function CobrancaPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.erro)
+      const text = await res.text()
+      let data: any = {}
+      try { data = JSON.parse(text) } catch { throw new Error('Serviço indisponível. Tente novamente.') }
+      if (!res.ok) throw new Error(data.erro || 'Erro desconhecido')
       alert(`✅ ${data.mensagem}`)
       carregarDevedores(token)
     } catch (err: any) {
-      alert('Erro: ' + err.message)
+      alert('Erro ao sincronizar: ' + err.message)
     } finally {
       setSincronizando(false)
     }

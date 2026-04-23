@@ -20,13 +20,16 @@ export class ZApiClient {
 
   async enviarTexto(telefone: string, mensagem: string): Promise<boolean> {
     try {
+      // Normaliza número brasileiro: remove não-dígitos e adiciona 55 se necessário
+      const num = telefone.replace(/\D/g, '')
+      const phone = num.startsWith('55') ? num : `55${num}`
       const res = await fetch(`${this.baseUrl}/send-text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Client-Token': this.clientToken,
         },
-        body: JSON.stringify({ phone: telefone, message: mensagem }),
+        body: JSON.stringify({ phone, message: mensagem }),
       })
       const data = await res.json()
       if (!res.ok || data.error) {
@@ -44,13 +47,15 @@ export class ZApiClient {
    */
   async enviarTextoDetalhado(telefone: string, mensagem: string): Promise<{ ok: boolean; status: number; body: any; erro?: string }> {
     try {
+      const num = telefone.replace(/\D/g, '')
+      const phone = num.startsWith('55') ? num : `55${num}`
       const res = await fetch(`${this.baseUrl}/send-text`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Client-Token': this.clientToken,
         },
-        body: JSON.stringify({ phone: telefone, message: mensagem }),
+        body: JSON.stringify({ phone, message: mensagem }),
       })
       const body = await res.json().catch(() => ({}))
       return { ok: res.ok && !body.error, status: res.status, body }

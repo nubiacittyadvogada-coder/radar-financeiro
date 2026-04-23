@@ -10,6 +10,19 @@ import { processarMensagemDevedor } from '@/lib/agenteConversacional'
 
 export async function POST(req: NextRequest) {
   try {
+    // Valida secret se configurado (adicionar ZAPI_WEBHOOK_SECRET no .env e na URL do webhook)
+    const webhookSecret = process.env.ZAPI_WEBHOOK_SECRET
+    if (webhookSecret) {
+      const incomingSecret =
+        req.nextUrl.searchParams.get('secret') ||
+        req.headers.get('x-webhook-secret') ||
+        req.headers.get('x-zapi-secret') || ''
+      if (incomingSecret !== webhookSecret) {
+        console.log('[Webhook ZApi] Rejeitado: secret inválido')
+        return Response.json({ ok: true }) // 200 para não revelar que existe validação
+      }
+    }
+
     const body = await req.json()
 
     console.log('[Webhook ZApi] Payload recebido:', JSON.stringify(body).substring(0, 500))
