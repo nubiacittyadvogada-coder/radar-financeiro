@@ -21,15 +21,38 @@ export async function POST(req: NextRequest) {
 
     const zapi = new ZApiClient(conta.zapiInstanceId, conta.zapiToken, conta.zapiClientToken)
 
-    const mensagem = `✅ *Radar Financeiro — Teste de Conexão*\n\nOlá, *${conta.nomeEmpresa}*!\n\nSua integração WhatsApp está funcionando corretamente. Você receberá alertas de vencimento e resumos semanais neste número.\n\n_Radar Financeiro_ 🚀`
+    // Verifica status antes
+    const status = await zapi.consultarStatus()
 
-    const enviado = await zapi.enviarTexto(conta.telefoneAlerta, mensagem)
+    const mensagem = `✅ *Radar Financeiro — Teste de Conexão*\n\nOlá, *${conta.nomeEmpresa}*!\n\nSua integração WhatsApp está funcionando. Você receberá alertas neste número.\n\n_${new Date().toLocaleTimeString('pt-BR')}_`
 
-    if (!enviado) {
-      return Response.json({ erro: 'Falha ao enviar mensagem. Verifique se a instância Z-API está conectada e as credenciais estão corretas.' }, { status: 500 })
+    const resultado = await zapi.enviarTextoDetalhado(conta.telefoneAlerta, mensagem)
+
+    console.log('[Testar Z-API] instanceId:', conta.zapiInstanceId)
+    console.log('[Testar Z-API] token (últimos 6):', conta.zapiToken?.slice(-6))
+    console.log('[Testar Z-API] clientToken (últimos 6):', conta.zapiClientToken?.slice(-6))
+    console.log('[Testar Z-API] telefone:', conta.telefoneAlerta)
+    console.log('[Testar Z-API] status:', JSON.stringify(status.body))
+    console.log('[Testar Z-API] resultado envio:', JSON.stringify(resultado))
+
+    if (!resultado.ok) {
+      return Response.json({
+        erro: 'Falha ao enviar. Veja detalhes abaixo.',
+        instanciaId: conta.zapiInstanceId,
+        statusInstancia: status.body,
+        zapiHttpStatus: resultado.status,
+        zapiResposta: resultado.body,
+        zapiErro: resultado.erro,
+      }, { status: 500 })
     }
 
-    return Response.json({ ok: true, mensagem: `Mensagem de teste enviada para ${conta.telefoneAlerta}` })
+    return Response.json({
+      ok: true,
+      mensagem: `Mensagem de teste enviada para ${conta.telefoneAlerta}`,
+      instanciaId: conta.zapiInstanceId,
+      statusInstancia: status.body,
+      zapiResposta: resultado.body,
+    })
   } catch (err: any) {
     return Response.json({ erro: err.message }, { status: 500 })
   }

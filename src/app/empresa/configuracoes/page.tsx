@@ -118,8 +118,13 @@ export default function EmpresaConfiguracoesPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.erro)
-      setTesteMsg('✅ ' + data.mensagem)
+      if (!res.ok) {
+        const detalhe = data.zapiResposta ? ` | Z-API: ${JSON.stringify(data.zapiResposta)}` : ''
+        const statusInst = data.statusInstancia ? ` | Status: ${JSON.stringify(data.statusInstancia)}` : ''
+        throw new Error((data.erro || 'Erro') + detalhe + statusInst)
+      }
+      const detalhe = data.zapiResposta ? ` | Z-API: ${JSON.stringify(data.zapiResposta)}` : ''
+      setTesteMsg('✅ ' + data.mensagem + detalhe)
     } catch (err: any) {
       setTesteMsg('❌ ' + err.message)
     } finally {
